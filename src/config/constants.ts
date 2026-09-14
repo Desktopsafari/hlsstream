@@ -4,8 +4,11 @@
 
 export const SITE_NAME = "Desktop Safari Live";
 
+// `||` (not `??`) is deliberate: an env var that's set but left blank in a
+// hosting dashboard is an empty string, not undefined/null, so `??` would
+// silently accept it and break playback.
 export const HLS_STREAM_URL =
-  process.env.NEXT_PUBLIC_HLS_STREAM_URL ??
+  process.env.NEXT_PUBLIC_HLS_STREAM_URL ||
   "https://stream.desktopsafari.com/hls/stream.m3u8";
 
 // How often the player retries after the stream is detected offline.

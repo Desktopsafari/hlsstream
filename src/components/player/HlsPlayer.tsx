@@ -115,7 +115,7 @@ export default function HlsPlayer() {
   }, []);
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-black">
+    <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-moss bg-black shadow-sm">
       <video
         ref={videoRef}
         className="h-full w-full"
@@ -125,7 +125,7 @@ export default function HlsPlayer() {
         autoPlay
       />
       {status !== "playing" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+        <div className="absolute inset-0 flex items-center justify-center bg-forest-dark/85">
           {status === "loading" && <LoadingIndicator />}
           {status === "offline" && <OfflineMessage />}
           {status === "unsupported" && <UnsupportedMessage />}
@@ -137,8 +137,8 @@ export default function HlsPlayer() {
 
 function LoadingIndicator() {
   return (
-    <div className="flex flex-col items-center gap-3 text-neutral-300">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-600 border-t-neutral-200" />
+    <div className="flex flex-col items-center gap-3 text-parchment">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-parchment/30 border-t-amber" />
       <span className="text-sm">Connecting to stream…</span>
     </div>
   );
@@ -146,9 +146,9 @@ function LoadingIndicator() {
 
 function OfflineMessage() {
   return (
-    <div className="flex flex-col items-center gap-2 px-4 text-center text-neutral-300">
+    <div className="flex flex-col items-center gap-2 px-4 text-center text-parchment">
       <span className="text-base font-medium">Stream is currently offline</span>
-      <span className="text-sm text-neutral-500">
+      <span className="text-sm text-parchment/70">
         We&apos;ll reconnect automatically as soon as it&apos;s back.
       </span>
     </div>
@@ -157,11 +157,11 @@ function OfflineMessage() {
 
 function UnsupportedMessage() {
   return (
-    <div className="flex flex-col items-center gap-2 px-4 text-center text-neutral-300">
+    <div className="flex flex-col items-center gap-2 px-4 text-center text-parchment">
       <span className="text-base font-medium">
         Your browser can&apos;t play this stream
       </span>
-      <span className="text-sm text-neutral-500">
+      <span className="text-sm text-parchment/70">
         Try a recent version of Chrome, Firefox, Edge, or Safari.
       </span>
     </div>

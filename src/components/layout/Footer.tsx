@@ -2,8 +2,8 @@ import { SITE_NAME } from "@/config/constants";
 
 export default function Footer() {
   return (
-    <footer className="border-t border-neutral-800">
-      <div className="mx-auto flex max-w-5xl flex-col gap-1 px-4 py-4 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
+    <footer className="border-t border-moss">
+      <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-6 text-xs text-muted sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <span>
           &copy; {new Date().getFullYear()} {SITE_NAME}
         </span>

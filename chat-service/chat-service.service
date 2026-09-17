@@ -1,0 +1,18 @@
+# Deploy to /etc/systemd/system/chat-service.service on the VPS.
+[Unit]
+Description=Desktop Safari Live chat service (Socket.IO)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=chatservice
+WorkingDirectory=/opt/chat-service
+EnvironmentFile=/opt/chat-service/.env
+ExecStart=/usr/bin/node /opt/chat-service/server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

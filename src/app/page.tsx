@@ -1,4 +1,5 @@
 import HlsPlayer from "@/components/player/HlsPlayer";
+import ChatPanel from "@/components/chat/ChatPanel";
 import Card from "@/components/ui/Card";
 import { SITE_NAME } from "@/config/constants";
 
@@ -16,9 +17,7 @@ export default function HomePage() {
         <HlsPlayer />
 
         <Card title="Live Chat" className="flex flex-col lg:h-full">
-          <div className="flex flex-1 items-center justify-center py-10 text-center text-sm text-muted">
-            Chat is coming soon.
-          </div>
+          <ChatPanel />
         </Card>
       </div>
 

@@ -33,11 +33,7 @@ export async function sendPollResultsEmail(
   ].join("\n");
 
   const { error } = await resend.emails.send({
-    // Resend's shared test domain -- delivers fine to your own verified
-    // address without needing to verify a sending domain first. Switch
-    // this to something like "polls@desktopsafari.com" once that domain
-    // is verified in Resend.
-    from: "Desktop Safari Live <onboarding@resend.dev>",
+    from: "Desktop Safari Live <polls@mail.desktopsafari.com>",
     to: POLL_RESULTS_EMAIL,
     subject: `Poll results: ${question}`,
     text,

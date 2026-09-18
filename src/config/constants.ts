@@ -23,3 +23,13 @@ export const CHAT_SOCKET_PATH = "/chat";
 
 // How often the poll widget re-checks whether the poll has opened/closed.
 export const POLL_REFRESH_INTERVAL_MS = 30000;
+
+// Where poll results get emailed. Not a secret -- just the site's fixed
+// destination address -- so it lives here rather than as an env var.
+export const POLL_RESULTS_EMAIL = "desktopsafari@gmail.com";
+
+// Deliberately non-obvious path, not linked from anywhere in the site nav.
+// If you ever change this, also update the literal in src/middleware.ts's
+// `matcher` (Next.js requires that to be a static literal, it can't import
+// this constant) and in robots.ts.
+export const ADMIN_PATH = "/ctrl-9k3x7m2q";

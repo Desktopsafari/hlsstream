@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/cron/open-poll", "schedule": "0 16 * * *" },
+    { "path": "/api/cron/close-poll", "schedule": "0 0 * * *" }
+  ]
+}

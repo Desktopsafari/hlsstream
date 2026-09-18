@@ -1,0 +1,40 @@
+POLL CRON SCHEDULE -- MANUAL DST ADJUSTMENT NEEDED TWICE A YEAR
+==================================================================
+
+vercel.json runs the poll open/close crons at a FIXED UTC time. Vercel
+Cron only understands UTC, but "noon Eastern" / "8pm Eastern" shifts
+between EDT (UTC-4, summer) and EST (UTC-5, winter) -- so the schedule
+below needs a one-line edit twice a year, right when US clocks change.
+
+CURRENT SETTING (in vercel.json right now) -- correct for EDT:
+  open-poll:  "0 16 * * *"   (16:00 UTC = 12:00pm EDT)
+  close-poll: "0 0 * * *"    (00:00 UTC = 8:00pm EDT, same UTC day)
+
+WHEN CLOCKS "FALL BACK" (DST ends, switch to EST) -- add 1 hour to both:
+  open-poll:  "0 17 * * *"   (17:00 UTC = 12:00pm EST)
+  close-poll: "0 1 * * *"    (01:00 UTC = 8:00pm EST)
+
+WHEN CLOCKS "SPRING FORWARD" (DST starts, switch back to EDT) -- subtract
+1 hour from both, back to the CURRENT SETTING above.
+
+EXACT DATES TO MAKE THE CHANGE (US DST rules: starts 2nd Sunday of March,
+ends 1st Sunday of November):
+
+  2026-11-01  -> switch to EST times (17:00 / 01:00)
+  2027-03-14  -> switch back to EDT times (16:00 / 00:00)
+  2027-11-07  -> switch to EST times (17:00 / 01:00)
+  2028-03-12  -> switch back to EDT times (16:00 / 00:00)
+  2028-11-05  -> switch to EST times (17:00 / 01:00)
+
+After 2028, the rule is: 2nd Sunday of March (spring, use EDT times) and
+1st Sunday of November (fall, use EST times).
+
+HOW TO MAKE THE CHANGE: edit the two "schedule" values in vercel.json,
+commit, and push -- Vercel picks up the new cron schedule on the next
+deploy. No dashboard changes needed.
+
+Also remember: Vercel's Hobby-tier cron only guarantees firing sometime
+within the scheduled UTC hour, not to the exact minute -- the poll may
+open/close a few minutes (rarely more) later than the target time. The
+code tolerates this fine (it just flips whatever poll is currently
+scheduled/open when the cron fires), it's only a timing precision note.

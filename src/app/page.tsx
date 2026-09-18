@@ -1,5 +1,6 @@
 import HlsPlayer from "@/components/player/HlsPlayer";
 import ChatPanel from "@/components/chat/ChatPanel";
+import PollCard from "@/components/poll/PollCard";
 import Card from "@/components/ui/Card";
 import { SITE_NAME } from "@/config/constants";
 
@@ -23,10 +24,7 @@ export default function HomePage() {
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <Card title="Today's Vote">
-          <p className="text-sm text-muted">
-            Voting is coming soon — check back to help decide what happens
-            next in the habitat.
-          </p>
+          <PollCard />
         </Card>
         <Card title="About This Stream">
           <p className="text-sm text-muted">

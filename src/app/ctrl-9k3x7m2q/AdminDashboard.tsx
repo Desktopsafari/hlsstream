@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import PollEditor from "./PollEditor";
+import SpeciesAdmin from "./SpeciesAdmin";
 
 type PollOptionResult = {
   option_id: string;
@@ -32,6 +34,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [polls, setPolls] = useState<Poll[]>([]);
   const [bans, setBans] = useState<Ban[]>([]);
+  const [editingPollId, setEditingPollId] = useState<string | null>(null);
 
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
@@ -187,23 +190,47 @@ export default function AdminDashboard() {
         <h2 className="mb-3 font-heading text-lg font-semibold text-forest">Poll History</h2>
         <div className="flex flex-col gap-4">
           {polls.length === 0 && <p className="text-sm text-muted">No polls yet.</p>}
-          {polls.map((poll) => (
-            <div key={poll.id} className="border-b border-moss pb-3 last:border-0">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-ink">{poll.question}</p>
-                <span className="text-xs uppercase text-muted">{poll.status}</span>
+          {polls.map((poll) =>
+            editingPollId === poll.id ? (
+              <PollEditor
+                key={poll.id}
+                poll={poll}
+                onCancel={() => setEditingPollId(null)}
+                onSaved={() => {
+                  setEditingPollId(null);
+                  loadPolls();
+                }}
+              />
+            ) : (
+              <div key={poll.id} className="border-b border-moss pb-3 last:border-0">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-ink">{poll.question}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase text-muted">{poll.status}</span>
+                    {poll.status !== "closed" && (
+                      <button
+                        onClick={() => setEditingPollId(poll.id)}
+                        className="rounded-md border border-moss px-2 py-1 text-xs text-forest hover:bg-parchment"
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <ul className="mt-1 text-sm text-muted">
+                  {poll.options.map((o) => (
+                    <li key={o.option_id}>
+                      {o.label}: {o.vote_count}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="mt-1 text-sm text-muted">
-                {poll.options.map((o) => (
-                  <li key={o.option_id}>
-                    {o.label}: {o.vote_count}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+            ),
+          )}
         </div>
       </section>
+
+      <SpeciesAdmin />
 
       {/* Moderation */}
       <section className="rounded-xl border border-moss bg-card p-5 shadow-sm">

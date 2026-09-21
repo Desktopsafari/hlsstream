@@ -77,13 +77,24 @@ export default function PollCard() {
   const totalVotes = options.reduce((sum, o) => sum + o.vote_count, 0);
   const showResults = poll.status === "closed" || hasVoted;
 
+  const isClosed = poll.status === "closed";
+
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm font-medium text-ink">{poll.question}</p>
-
-      {poll.status === "closed" && (
-        <p className="text-xs uppercase tracking-wide text-muted">Voting closed</p>
+      {isClosed && (
+        <div
+          role="status"
+          className="rounded-lg border-b-4 border-amber bg-forest px-4 py-4 text-center"
+        >
+          <p className="font-heading text-3xl font-black uppercase leading-none tracking-wide text-parchment sm:text-4xl">
+            Voting closed!
+          </p>
+        </div>
       )}
+
+      <p className={isClosed ? "text-base font-semibold text-ink" : "text-sm font-medium text-ink"}>
+        {poll.question}
+      </p>
 
       {!showResults &&
         options.map((opt) => (

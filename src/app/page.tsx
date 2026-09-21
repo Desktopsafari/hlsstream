@@ -1,6 +1,7 @@
 import HlsPlayer from "@/components/player/HlsPlayer";
 import ChatPanel from "@/components/chat/ChatPanel";
 import PollCard from "@/components/poll/PollCard";
+import SpeciesCard from "@/components/species/SpeciesCard";
 import Card from "@/components/ui/Card";
 import { SITE_NAME } from "@/config/constants";
 
@@ -22,16 +23,11 @@ export default function HomePage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-6 sm:grid-cols-2">
         <Card title="Today's Vote">
           <PollCard />
         </Card>
-        <Card title="About This Stream">
-          <p className="text-sm text-muted">
-            A 24/7 look into the terrarium, streamed live from a
-            Raspberry Pi camera.
-          </p>
-        </Card>
+        <SpeciesCard />
       </div>
     </div>
   );

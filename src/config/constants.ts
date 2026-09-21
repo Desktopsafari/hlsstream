@@ -24,6 +24,17 @@ export const CHAT_SOCKET_PATH = "/chat";
 // How often the poll widget re-checks whether the poll has opened/closed.
 export const POLL_REFRESH_INTERVAL_MS = 30000;
 
+// Donation link (Ko-fi tip page). Donation-only keeps this on the right
+// side of Vercel's Hobby-tier fair-use rules -- don't point it at a shop.
+export const KOFI_URL = "https://ko-fi.com/desktopsafari";
+
+// The one stream that exists today. Species cards are keyed by stream id so
+// the future multi-stream map can add more without restructuring.
+export const STREAM_ID = "main";
+
+// Public Supabase Storage bucket holding species photos + range maps.
+export const SPECIES_BUCKET = "species-images";
+
 // Where poll results get emailed. Not a secret -- just the site's fixed
 // destination address -- so it lives here rather than as an env var.
 export const POLL_RESULTS_EMAIL = "desktopsafari@gmail.com";

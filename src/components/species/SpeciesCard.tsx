@@ -59,53 +59,63 @@ function CardBody({ card, large }: { card: SpeciesCardData; large: boolean }) {
         )}
       </div>
 
-      {(card.photoUrl || card.rangeMapUrl) && (
-        <div className={`grid gap-3 ${hasBoth ? "grid-cols-[3fr_2fr]" : "grid-cols-1"}`}>
-          {card.photoUrl && (
-            <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-moss bg-moss">
-              <Image
-                src={card.photoUrl}
-                alt={card.speciesName ? `${card.speciesName} photo` : "Species photo"}
-                fill
-                sizes={large ? "(min-width: 768px) 420px, 90vw" : "(min-width: 640px) 240px, 60vw"}
-                className="object-cover"
-              />
-            </div>
-          )}
-          {card.rangeMapUrl && (
-            <div className="relative aspect-square self-end overflow-hidden rounded-lg border border-moss bg-parchment">
-              <Image
-                src={card.rangeMapUrl}
-                alt={card.speciesName ? `${card.speciesName} range map` : "Range map"}
-                fill
-                sizes={large ? "(min-width: 768px) 280px, 40vw" : "(min-width: 640px) 160px, 35vw"}
-                className="object-contain p-1"
-              />
-            </div>
-          )}
-        </div>
-      )}
+      {/*
+        The inline (non-enlarged) card on mobile stays at the same compact
+        footprint as the empty state regardless of how much content exists
+        -- tapping still opens the full enlarged view. Desktop is
+        unaffected: this content shows there exactly as before. The `large`
+        variant (used inside the enlarged overlay) always shows everything,
+        at every viewport size.
+      */}
+      <div className={large ? "flex flex-col gap-4" : "hidden flex-col gap-4 lg:flex"}>
+        {(card.photoUrl || card.rangeMapUrl) && (
+          <div className={`grid gap-3 ${hasBoth ? "grid-cols-[3fr_2fr]" : "grid-cols-1"}`}>
+            {card.photoUrl && (
+              <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-moss bg-moss">
+                <Image
+                  src={card.photoUrl}
+                  alt={card.speciesName ? `${card.speciesName} photo` : "Species photo"}
+                  fill
+                  sizes={large ? "(min-width: 768px) 420px, 90vw" : "(min-width: 640px) 240px, 60vw"}
+                  className="object-cover"
+                />
+              </div>
+            )}
+            {card.rangeMapUrl && (
+              <div className="relative aspect-square self-end overflow-hidden rounded-lg border border-moss bg-parchment">
+                <Image
+                  src={card.rangeMapUrl}
+                  alt={card.speciesName ? `${card.speciesName} range map` : "Range map"}
+                  fill
+                  sizes={large ? "(min-width: 768px) 280px, 40vw" : "(min-width: 640px) 160px, 35vw"}
+                  className="object-contain p-1"
+                />
+              </div>
+            )}
+          </div>
+        )}
 
-      {card.infoBlocks.length > 0 && (
-        <dl className="flex flex-col gap-3">
-          {card.infoBlocks.map((block, i) => (
-            <div key={i}>
-              <dt className="text-[11px] font-bold uppercase tracking-widest text-forest">
-                {block.title}
-              </dt>
-              <dd
-                className={`text-ink ${
-                  large ? "text-base leading-relaxed" : "line-clamp-3 text-sm"
-                }`}
-              >
-                {block.body}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
+        {card.infoBlocks.length > 0 && (
+          <dl className="flex flex-col gap-3">
+            {card.infoBlocks.map((block, i) => (
+              <div key={i}>
+                <dt className="text-[11px] font-bold uppercase tracking-widest text-forest">
+                  {block.title}
+                </dt>
+                <dd
+                  className={`text-ink ${
+                    large ? "text-base leading-relaxed" : "line-clamp-3 text-sm"
+                  }`}
+                >
+                  {block.body}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
 
-      <StatusBar status={card.conservationStatus} />
+        <StatusBar status={card.conservationStatus} />
+      </div>
     </div>
   );
 }
@@ -209,7 +219,7 @@ export default function SpeciesCard() {
         className="cursor-zoom-in rounded-xl border border-moss bg-card p-5 shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-forest"
       >
         <CardBody card={card} large={false} />
-        <p className="mt-3 text-[11px] text-muted sm:hidden">Tap to enlarge</p>
+        <p className="mt-3 text-[11px] text-muted lg:hidden">Tap to enlarge</p>
       </div>
 
       {mounted && (

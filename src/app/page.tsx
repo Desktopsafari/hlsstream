@@ -15,19 +15,32 @@ export default function HomePage() {
         <p className="text-sm text-muted">Live now, streaming 24/7.</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+      {/*
+        One grid for everything below the title, so the mobile stacking
+        order (species -> chat -> poll) and the desktop pairing (player+chat
+        row, poll+species row) can both be expressed with plain `order`
+        utilities instead of two separate grids. Source/DOM order below is
+        deliberately unchanged (player, chat, poll, species) -- at `lg` every
+        item resets to `order-none`, so desktop falls back to that DOM order,
+        which auto-places into the same two 2-up rows as before.
+      */}
+      <div className="grid grid-cols-1 gap-x-6 gap-y-8 lg:grid-cols-[1fr_360px]">
         <HlsPlayer />
 
-        <Card title="Live Chat" className="flex flex-col lg:h-full">
+        <Card
+          title="Live Chat"
+          className="order-2 flex flex-col lg:order-none lg:h-full"
+        >
           <ChatPanel />
         </Card>
-      </div>
 
-      <div className="grid grid-cols-1 items-start gap-6 sm:grid-cols-2">
-        <Card title="Today's Vote">
+        <Card title="Today's Vote" className="order-3 self-start lg:order-none">
           <PollCard />
         </Card>
-        <SpeciesCard />
+
+        <div className="order-1 self-start lg:order-none">
+          <SpeciesCard />
+        </div>
       </div>
     </div>
   );

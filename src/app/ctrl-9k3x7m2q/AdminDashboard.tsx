@@ -20,6 +20,8 @@ type Poll = {
   closes_at: string;
   created_at: string;
   options: PollOptionResult[];
+  repeat_daily: boolean;
+  repeat_paused: boolean;
 };
 
 type Ban = {
@@ -38,6 +40,7 @@ export default function AdminDashboard() {
 
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
+  const [repeatDaily, setRepeatDaily] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
   const [pollSubmitting, setPollSubmitting] = useState(false);
 
@@ -82,6 +85,7 @@ export default function AdminDashboard() {
       body: JSON.stringify({
         question,
         options: options.filter((o) => o.trim().length > 0),
+        repeatDaily,
       }),
     });
 
@@ -95,6 +99,7 @@ export default function AdminDashboard() {
 
     setQuestion("");
     setOptions(["", ""]);
+    setRepeatDaily(false);
     loadPolls();
   }
 
@@ -165,6 +170,15 @@ export default function AdminDashboard() {
               className="rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
             />
           ))}
+          <label className="flex items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={repeatDaily}
+              onChange={(e) => setRepeatDaily(e.target.checked)}
+              className="h-4 w-4 rounded border-moss"
+            />
+            Repeat this poll daily
+          </label>
           <div className="flex gap-2">
             <button
               type="button"
@@ -217,6 +231,15 @@ export default function AdminDashboard() {
                     )}
                   </div>
                 </div>
+                {poll.repeat_daily && !poll.repeat_paused && (
+                  <p className="mt-1 text-xs font-semibold text-forest">🔁 Repeats daily</p>
+                )}
+                {poll.repeat_paused && (
+                  <p className="mt-1 text-xs text-amber">
+                    🔁 Repeating poll paused — a different poll was manually queued for the next
+                    cycle.
+                  </p>
+                )}
                 <ul className="mt-1 text-sm text-muted">
                   {poll.options.map((o) => (
                     <li key={o.option_id}>

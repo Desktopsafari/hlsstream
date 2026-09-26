@@ -6,7 +6,7 @@ export async function GET() {
 
   const { data: polls, error } = await supabase
     .from("polls")
-    .select("id, question, status, opens_at, closes_at, created_at")
+    .select("id, question, status, opens_at, closes_at, created_at, repeat_daily, repeat_paused")
     .order("created_at", { ascending: false })
     .limit(20);
 
@@ -34,6 +34,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const question = body?.question;
   const options = body?.options;
+  const repeatDaily = body?.repeatDaily === true;
 
   if (
     typeof question !== "string" ||
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
     .insert({
       question: question.trim(),
       status: "scheduled",
+      repeat_daily: repeatDaily,
       // Placeholder timestamps -- the open/close crons overwrite these
       // with the real timestamps when they actually flip the status.
       opens_at: new Date().toISOString(),
@@ -109,6 +111,7 @@ export async function PUT(request: Request) {
   const pollId = body?.pollId;
   const question = body?.question;
   const optionsInput: unknown = body?.options;
+  const repeatDailyInput: unknown = body?.repeatDaily;
 
   if (typeof pollId !== "string" || !pollId) {
     return NextResponse.json({ error: "Missing pollId." }, { status: 400 });
@@ -121,7 +124,7 @@ export async function PUT(request: Request) {
 
   const { data: poll } = await supabase
     .from("polls")
-    .select("id, question, status")
+    .select("id, question, status, repeat_daily")
     .eq("id", pollId)
     .maybeSingle();
 
@@ -220,11 +223,19 @@ export async function PUT(request: Request) {
     }
   }
 
+  // The repeat-daily flag never touches votes or options, so it's editable
+  // regardless of the options lock above -- turning it off just means this
+  // poll's current cycle finishes normally without spawning a continuation.
+  const pollUpdates: { question?: string; repeat_daily?: boolean } = {};
   if (question.trim() !== poll.question) {
-    const { error } = await supabase
-      .from("polls")
-      .update({ question: question.trim() })
-      .eq("id", pollId);
+    pollUpdates.question = question.trim();
+  }
+  if (typeof repeatDailyInput === "boolean" && repeatDailyInput !== poll.repeat_daily) {
+    pollUpdates.repeat_daily = repeatDailyInput;
+  }
+
+  if (Object.keys(pollUpdates).length > 0) {
+    const { error } = await supabase.from("polls").update(pollUpdates).eq("id", pollId);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }

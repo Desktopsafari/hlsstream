@@ -14,6 +14,8 @@ type EditablePoll = {
   question: string;
   status: "scheduled" | "open" | "closed";
   options: PollOptionResult[];
+  repeat_daily: boolean;
+  repeat_paused: boolean;
 };
 
 type EditOption = { id?: string; label: string };
@@ -31,6 +33,7 @@ export default function PollEditor({
   const locked = totalVotes > 0;
 
   const [question, setQuestion] = useState(poll.question);
+  const [repeatDaily, setRepeatDaily] = useState(poll.repeat_daily);
   const [options, setOptions] = useState<EditOption[]>(
     [...poll.options]
       .sort((a, b) => a.display_order - b.display_order)
@@ -59,6 +62,7 @@ export default function PollEditor({
         pollId: poll.id,
         question,
         options: options.map((o) => ({ id: o.id, label: o.label })),
+        repeatDaily,
       }),
     });
 
@@ -90,6 +94,16 @@ export default function PollEditor({
           Options are locked because votes exist. Only the question can be edited.
         </p>
       )}
+
+      <label className="flex items-center gap-2 text-sm text-ink">
+        <input
+          type="checkbox"
+          checked={repeatDaily}
+          onChange={(e) => setRepeatDaily(e.target.checked)}
+          className="h-4 w-4 rounded border-moss"
+        />
+        Repeat this poll daily
+      </label>
 
       {options.map((opt, i) => (
         <div key={opt.id ?? `new-${i}`} className="flex gap-2">

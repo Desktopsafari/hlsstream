@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import { POLL_RESULTS_EMAIL } from "@/config/constants";
+import { POLL_RESULTS_EMAIL, SITE_NAME } from "@/config/constants";
 
 type PollResultOption = {
   label: string;
@@ -41,5 +41,26 @@ export async function sendPollResultsEmail(
 
   if (error) {
     console.error("Failed to send poll results email:", error);
+  }
+}
+
+export async function sendSuggestionEmail(message: string) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.error("Missing RESEND_API_KEY, skipping suggestion email");
+    return;
+  }
+
+  const resend = new Resend(apiKey);
+
+  const { error } = await resend.emails.send({
+    from: `${SITE_NAME} <polls@mail.desktopsafari.com>`,
+    to: POLL_RESULTS_EMAIL,
+    subject: "New suggestion from the contact page",
+    text: message,
+  });
+
+  if (error) {
+    console.error("Failed to send suggestion email:", error);
   }
 }

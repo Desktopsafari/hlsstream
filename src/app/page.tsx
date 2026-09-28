@@ -2,6 +2,7 @@ import HlsPlayer from "@/components/player/HlsPlayer";
 import ChatPanel from "@/components/chat/ChatPanel";
 import PollCard from "@/components/poll/PollCard";
 import SpeciesCard from "@/components/species/SpeciesCard";
+import ViewerCount from "@/components/viewers/ViewerCount";
 import Card from "@/components/ui/Card";
 import { SITE_NAME } from "@/config/constants";
 
@@ -25,7 +26,10 @@ export default function HomePage() {
         which auto-places into the same two 2-up rows as before.
       */}
       <div className="grid grid-cols-1 gap-x-6 gap-y-8 lg:grid-cols-[1fr_360px]">
-        <HlsPlayer />
+        <div className="flex flex-col gap-2">
+          <HlsPlayer />
+          <ViewerCount />
+        </div>
 
         <Card
           title="Live Chat"

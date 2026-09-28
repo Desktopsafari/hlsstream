@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SITE_NAME } from "@/config/constants";
 
 export default function Footer() {
@@ -7,7 +8,12 @@ export default function Footer() {
         <span>
           &copy; {new Date().getFullYear()} {SITE_NAME}
         </span>
-        <span>Live stream availability may vary.</span>
+        <div className="flex items-center gap-3">
+          <Link href="/contact" className="hover:text-forest">
+            Contact
+          </Link>
+          <span>Live stream availability may vary.</span>
+        </div>
       </div>
     </footer>
   );

@@ -164,6 +164,25 @@ io.on("connection", async (socket) => {
   });
 });
 
+// Separate namespace from the default "/" chat connection above: it fires
+// as soon as the page loads, with no session/display-name auth, so it
+// counts every visitor actually on the page rather than only the ones who
+// picked a display name and opened chat. Namespaces multiplex over the
+// same underlying Socket.IO path/transport, so no nginx changes are
+// needed beyond the existing /chat proxy block.
+const viewers = io.of("/viewers");
+let viewerCount = 0;
+
+viewers.on("connection", (socket) => {
+  viewerCount++;
+  viewers.emit("viewers:count", viewerCount);
+
+  socket.on("disconnect", () => {
+    viewerCount--;
+    viewers.emit("viewers:count", viewerCount);
+  });
+});
+
 refreshBanCache();
 setInterval(refreshBanCache, 30000);
 

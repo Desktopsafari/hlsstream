@@ -12,6 +12,12 @@ export default function Header() {
           {SITE_NAME}
         </Link>
         <div className="flex items-center gap-2 sm:gap-3">
+          <Link
+            href="/contact"
+            className="rounded-full border border-parchment/40 px-3 py-1 text-xs font-semibold text-parchment transition-colors hover:border-amber hover:bg-amber"
+          >
+            Contact
+          </Link>
           <a
             href={KOFI_URL}
             target="_blank"

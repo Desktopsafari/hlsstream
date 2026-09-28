@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import PollEditor from "./PollEditor";
 import SpeciesAdmin from "./SpeciesAdmin";
+import NotificationCategoriesAdmin from "./NotificationCategoriesAdmin";
+import BroadcastComposer from "./BroadcastComposer";
+import SuggestionsAdmin from "./SuggestionsAdmin";
 
 type PollOptionResult = {
   option_id: string;
@@ -254,6 +257,10 @@ export default function AdminDashboard() {
       </section>
 
       <SpeciesAdmin />
+
+      <NotificationCategoriesAdmin />
+      <BroadcastComposer />
+      <SuggestionsAdmin />
 
       {/* Moderation */}
       <section className="rounded-xl border border-moss bg-card p-5 shadow-sm">

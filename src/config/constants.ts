@@ -24,6 +24,13 @@ export const CHAT_SOCKET_PATH = "/chat";
 // How often the poll widget re-checks whether the poll has opened/closed.
 export const POLL_REFRESH_INTERVAL_MS = 30000;
 
+// Voting ends at this wall-clock hour in this timezone, enforced in code
+// (src/lib/pollSchedule.ts). Vercel Hobby cron jobs can fire anywhere in
+// their scheduled hour, so the cron alone can't be trusted for an exact
+// cutoff -- it just flips the stored status and sends the results email.
+export const POLL_TIMEZONE = "America/New_York";
+export const POLL_CLOSE_HOUR = 20;
+
 // Donation link (Ko-fi tip page). Donation-only keeps this on the right
 // side of Vercel's Hobby-tier fair-use rules -- don't point it at a shop.
 export const KOFI_URL = "https://ko-fi.com/desktopsafari";

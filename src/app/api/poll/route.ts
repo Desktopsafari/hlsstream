@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { isPollPastCutoff } from "@/lib/pollSchedule";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -31,6 +32,12 @@ export async function GET(request: Request) {
 
   if (!poll) {
     return NextResponse.json({ poll: null });
+  }
+
+  // Report an open poll as closed once the 8pm cutoff has passed, even if the
+  // (imprecise) cron hasn't flipped the stored status yet.
+  if (poll.status === "open" && isPollPastCutoff(poll.opens_at)) {
+    poll.status = "closed";
   }
 
   const { data: options } = await supabase

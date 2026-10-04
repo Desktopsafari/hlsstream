@@ -42,6 +42,17 @@ export const STREAM_ID = "main";
 // Public Supabase Storage bucket holding species photos + range maps.
 export const SPECIES_BUCKET = "species-images";
 
+// Public Supabase Storage bucket holding the frog pictures on suggestion
+// events (same 4MB / JPG-PNG-WebP limits as the species bucket).
+export const EVENT_BUCKET = "event-images";
+
+// Suggestion events: name ideas are short, and a visitor may reasonably send
+// a couple per frog, so the hourly budget is a bit above the Contact box's 5.
+export const EVENT_NAME_MAX_LENGTH = 40;
+export const EVENT_RATE_LIMIT_MAX = 10;
+export const EVENT_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+export const EVENT_MAX_FROGS = 20;
+
 // Where poll results get emailed. Not a secret -- just the site's fixed
 // destination address -- so it lives here rather than as an env var.
 export const POLL_RESULTS_EMAIL = "desktopsafari@gmail.com";

@@ -3,6 +3,7 @@ import ChatPanel from "@/components/chat/ChatPanel";
 import PollCard from "@/components/poll/PollCard";
 import SpeciesCard from "@/components/species/SpeciesCard";
 import ViewerCount from "@/components/viewers/ViewerCount";
+import SuggestionEventCard from "@/components/event/SuggestionEventCard";
 import Card from "@/components/ui/Card";
 import { SITE_NAME } from "@/config/constants";
 
@@ -38,9 +39,25 @@ export default function HomePage() {
           <ChatPanel />
         </Card>
 
-        <Card title="Today's Vote" className="order-3 self-start lg:order-none">
-          <PollCard />
-        </Card>
+        {/*
+          Suggestion-event card + poll. On mobile this wrapper is
+          `display: contents`, so both are plain grid items and the event
+          card (order-1, earlier in the DOM than the species card) lands
+          right under the video. On desktop it becomes a column so the event
+          card stacks directly above the poll. The event card renders
+          nothing when no event is active, leaving just the poll -- the same
+          size and position as before.
+        */}
+        <div className="contents lg:flex lg:flex-col lg:gap-8 lg:self-start">
+          <SuggestionEventCard />
+
+          <Card
+            title="Today's Vote"
+            className="order-3 self-start lg:order-none lg:self-auto"
+          >
+            <PollCard />
+          </Card>
+        </div>
 
         <div className="order-1 self-start lg:order-none">
           <SpeciesCard />

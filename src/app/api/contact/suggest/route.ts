@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { sendSuggestionEmail } from "@/lib/email";
 import { getClientIp } from "@/lib/ip";
+import { allowAttempt } from "@/lib/rateLimit";
 
 const MAX_MESSAGE_LENGTH = 2000;
 const RATE_LIMIT_MAX = 5;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
-const ATTEMPT_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -17,27 +17,13 @@ export async function POST(request: Request) {
   const supabase = createServiceRoleClient();
   const ip = getClientIp(request);
 
-  // Opportunistic cleanup -- cheap, and means this table never needs its
-  // own cron job the way chat cleanup does.
-  await supabase
-    .from("contact_form_attempts")
-    .delete()
-    .lt("created_at", new Date(Date.now() - ATTEMPT_RETENTION_MS).toISOString());
-
-  const { count } = await supabase
-    .from("contact_form_attempts")
-    .select("id", { count: "exact", head: true })
-    .eq("ip_address", ip)
-    .gt("created_at", new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString());
-
-  if ((count ?? 0) >= RATE_LIMIT_MAX) {
+  const allowed = await allowAttempt(supabase, ip, "contact", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
+  if (!allowed) {
     return NextResponse.json(
       { error: "Too many submissions from this connection recently. Try again later." },
       { status: 429 },
     );
   }
-
-  await supabase.from("contact_form_attempts").insert({ ip_address: ip });
 
   // Silently accept-and-drop honeypot hits so a bot can't tell it was caught.
   if (honeypot.length > 0) {

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import PollEditor from "./PollEditor";
 import SpeciesAdmin from "./SpeciesAdmin";
+import SuggestionEventAdmin from "./SuggestionEventAdmin";
 import NotificationCategoriesAdmin from "./NotificationCategoriesAdmin";
 import BroadcastComposer from "./BroadcastComposer";
 import SuggestionsAdmin from "./SuggestionsAdmin";
@@ -255,6 +256,8 @@ export default function AdminDashboard() {
           )}
         </div>
       </section>
+
+      <SuggestionEventAdmin />
 
       <SpeciesAdmin />
 

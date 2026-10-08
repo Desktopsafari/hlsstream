@@ -18,49 +18,49 @@ export default function HomePage() {
       </div>
 
       {/*
-        One grid for everything below the title, so the mobile stacking
-        order (species -> chat -> poll) and the desktop pairing (player+chat
-        row, poll+species row) can both be expressed with plain `order`
-        utilities instead of two separate grids. Source/DOM order below is
-        deliberately unchanged (player, chat, poll, species) -- at `lg` every
-        item resets to `order-none`, so desktop falls back to that DOM order,
-        which auto-places into the same two 2-up rows as before.
+        Below `lg` both column wrappers are `display: contents`, so every card
+        is a direct grid item and the mobile/tablet stacking (video -> event ->
+        species -> chat -> poll) comes from the `order` utilities, exactly as
+        before. At `lg` the wrappers become two independent columns, so the
+        event card and poll follow the video directly instead of waiting for
+        the whole row to finish -- the chat card gets taller once someone
+        joins it, and in a shared row that left a gap under the stream.
+        The event card renders nothing when no event is active.
       */}
-      <div className="grid grid-cols-1 gap-x-6 gap-y-8 lg:grid-cols-[1fr_360px]">
-        <div className="flex flex-col gap-2">
-          <HlsPlayer />
-          <ViewerCount />
-        </div>
+      <div className="grid grid-cols-1 gap-x-6 gap-y-8 lg:grid-cols-[1fr_360px] lg:items-start">
+        <div className="contents lg:flex lg:flex-col lg:gap-8">
+          <div className="flex flex-col gap-2">
+            <HlsPlayer />
+            <ViewerCount />
+          </div>
 
-        <Card
-          title="Live Chat"
-          className="order-2 flex flex-col lg:order-none lg:h-full"
-        >
-          <ChatPanel />
-        </Card>
-
-        {/*
-          Suggestion-event card + poll. On mobile this wrapper is
-          `display: contents`, so both are plain grid items and the event
-          card (order-1, earlier in the DOM than the species card) lands
-          right under the video. On desktop it becomes a column so the event
-          card stacks directly above the poll. The event card renders
-          nothing when no event is active, leaving just the poll -- the same
-          size and position as before.
-        */}
-        <div className="contents lg:flex lg:flex-col lg:gap-8 lg:self-start">
           <SuggestionEventCard />
 
-          <Card
-            title="Today's Vote"
-            className="order-3 self-start lg:order-none lg:self-auto"
-          >
+          <Card title="Today's Vote" className="order-3 self-start lg:order-none lg:self-auto">
             <PollCard />
           </Card>
         </div>
 
-        <div className="order-1 self-start lg:order-none">
-          <SpeciesCard />
+        <div className="contents lg:flex lg:flex-col lg:gap-8">
+          {/*
+            Before joining, the chat card is as tall as the video column, as
+            it was when the two shared a row. That height is the video's 16:9
+            height at the current column width (page width capped at the 72rem
+            container, minus 3rem padding, the 22.5rem chat column + gap) plus
+            the viewer-count line (1rem text + 0.5rem gap) -- keep this in
+            step with the grid columns above and the video wrapper. Once
+            joined, the card grows past it as needed.
+          */}
+          <Card
+            title="Live Chat"
+            className="order-2 flex flex-col lg:order-none lg:min-h-[calc((min(100vw,72rem)_-_27rem)_*_0.5625_+_1.5rem)]"
+          >
+            <ChatPanel />
+          </Card>
+
+          <div className="order-1 self-start lg:order-none lg:self-auto">
+            <SpeciesCard />
+          </div>
         </div>
       </div>
     </div>

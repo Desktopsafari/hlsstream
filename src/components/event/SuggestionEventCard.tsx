@@ -68,49 +68,64 @@ export default function SuggestionEventCard() {
   const openFrog = event.frogs.find((f) => f.id === openFrogId) ?? null;
 
   return (
-    <Card title={event.prompt} className="order-1 lg:order-none">
-      {event.description && <p className="-mt-1 mb-3 text-sm text-muted">{event.description}</p>}
+    <Card className="order-1 lg:order-none">
+      {/*
+        Phones (below `sm`): the original stack -- heading, description, then
+        a 2-up grid of frogs. From `sm` up the heading + description sit on
+        the left and the frogs on the right, so a wide card doesn't leave
+        most of its width empty. The right column holds at most two pictures
+        per row (20.75rem = two 10rem tiles + the gap) and wraps to more rows
+        when an event has more frogs, so the text column keeps the rest.
+      */}
+      <div className="sm:grid sm:grid-cols-[minmax(11rem,1fr)_auto] sm:items-start sm:gap-x-6">
+        <div>
+          <h2 className="mb-3 font-heading text-lg font-semibold text-forest">{event.prompt}</h2>
+          {event.description && (
+            <p className="-mt-1 mb-3 text-sm text-muted">{event.description}</p>
+          )}
+        </div>
 
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {event.frogs.map((frog) => (
-          <li key={frog.id} className="flex flex-col gap-2">
-            <div className="relative aspect-square overflow-hidden rounded-lg border border-moss bg-moss/40">
-              {frog.imageUrl ? (
-                <Image
-                  src={frog.imageUrl}
-                  alt={frog.label}
-                  fill
-                  sizes="(min-width: 1024px) 170px, 45vw"
-                  className="object-cover"
-                />
-              ) : (
-                <div
-                  aria-hidden="true"
-                  className="flex h-full items-center justify-center px-2 text-center text-sm text-muted"
-                >
-                  {frog.label}
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              ref={(el) => {
-                buttonRefs.current[frog.id] = el;
-              }}
-              aria-expanded={openFrogId === frog.id}
-              aria-controls="name-idea-form"
-              onClick={() => setOpenFrogId(openFrogId === frog.id ? null : frog.id)}
-              className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
-                openFrogId === frog.id
-                  ? "border-forest bg-forest text-parchment"
-                  : "border-moss text-forest hover:bg-parchment"
-              }`}
-            >
-              Name {frog.label}
-            </button>
-          </li>
-        ))}
-      </ul>
+        <ul className="grid grid-cols-2 gap-3 sm:flex sm:max-w-[20.75rem] sm:flex-wrap sm:justify-end">
+          {event.frogs.map((frog) => (
+            <li key={frog.id} className="flex flex-col gap-2 sm:w-40">
+              <div className="relative aspect-square overflow-hidden rounded-lg border border-moss bg-moss/40">
+                {frog.imageUrl ? (
+                  <Image
+                    src={frog.imageUrl}
+                    alt={frog.label}
+                    fill
+                    sizes="(min-width: 640px) 160px, 45vw"
+                    className="object-cover"
+                  />
+                ) : (
+                  <div
+                    aria-hidden="true"
+                    className="flex h-full items-center justify-center px-2 text-center text-sm text-muted"
+                  >
+                    {frog.label}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                ref={(el) => {
+                  buttonRefs.current[frog.id] = el;
+                }}
+                aria-expanded={openFrogId === frog.id}
+                aria-controls="name-idea-form"
+                onClick={() => setOpenFrogId(openFrogId === frog.id ? null : frog.id)}
+                className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+                  openFrogId === frog.id
+                    ? "border-forest bg-forest text-parchment"
+                    : "border-moss text-forest hover:bg-parchment"
+                }`}
+              >
+                Name {frog.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       {openFrog && (
         <NameIdeaForm

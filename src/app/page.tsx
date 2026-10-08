@@ -1,3 +1,4 @@
+import Image from "next/image";
 import HlsPlayer from "@/components/player/HlsPlayer";
 import ChatPanel from "@/components/chat/ChatPanel";
 import PollCard from "@/components/poll/PollCard";
@@ -11,8 +12,23 @@ export default function HomePage() {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-6 sm:px-6 sm:py-10">
       <div className="flex flex-col gap-1">
-        <h1 className="font-heading text-2xl font-semibold text-forest sm:text-3xl">
-          {SITE_NAME}
+        <h1>
+          {/*
+            Real file size (1052x308) so the browser reserves the right space
+            before it loads. The height is capped per breakpoint (width follows
+            from the aspect ratio) so the player stays near the top on phones;
+            `sizes` matches the rendered widths so small screens don't download
+            the full-size file.
+          */}
+          <Image
+            src="/logo.png"
+            alt={SITE_NAME}
+            width={1052}
+            height={308}
+            preload
+            sizes="(min-width: 1024px) 328px, (min-width: 640px) 274px, 192px"
+            className="block h-14 w-auto max-w-full object-contain sm:h-20 lg:h-24"
+          />
         </h1>
         <p className="text-sm text-muted">Live now, streaming 24/7.</p>
       </div>

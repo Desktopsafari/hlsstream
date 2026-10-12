@@ -3,6 +3,7 @@ import ChatPanel from "@/components/chat/ChatPanel";
 import PollCard from "@/components/poll/PollCard";
 import SpeciesCard from "@/components/species/SpeciesCard";
 import ViewerCount from "@/components/viewers/ViewerCount";
+import NotifyMe from "@/components/notify/NotifyMe";
 import SuggestionEventCard from "@/components/event/SuggestionEventCard";
 import Card from "@/components/ui/Card";
 import { SITE_NAME } from "@/config/constants";
@@ -29,9 +30,19 @@ export default function HomePage() {
       */}
       <div className="grid grid-cols-1 gap-x-6 gap-y-8 lg:grid-cols-[1fr_360px] lg:items-start">
         <div className="contents lg:flex lg:flex-col lg:gap-8">
-          <div className="flex flex-col gap-2">
+          {/*
+            The row under the video is a fixed 1.5rem (4px gap + 20px content)
+            -- the same height the viewer-count line plus its gap used to take
+            -- so the chat card's min-height formula below still matches. The
+            row is always there, so the count appearing later doesn't shift
+            anything.
+          */}
+          <div className="flex flex-col">
             <HlsPlayer />
-            <ViewerCount />
+            <div className="flex h-6 items-center gap-3 pt-1">
+              <ViewerCount />
+              <NotifyMe />
+            </div>
           </div>
 
           <SuggestionEventCard />

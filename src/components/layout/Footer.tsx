@@ -8,9 +8,12 @@ export default function Footer() {
         <span>
           &copy; {new Date().getFullYear()} {SITE_NAME}
         </span>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <Link href="/contact" className="hover:text-forest">
             Contact
+          </Link>
+          <Link href="/privacy" className="hover:text-forest">
+            Privacy
           </Link>
           <span>Live stream availability may vary.</span>
         </div>

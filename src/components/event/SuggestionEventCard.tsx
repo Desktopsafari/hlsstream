@@ -260,7 +260,11 @@ function NameIdeaForm({
 
       <p className="text-[11px] text-muted">
         Suggestions are reviewed by us, and names we choose may be shown publicly. We don&apos;t
-        ask for your name or email.
+        ask for your name or email.{" "}
+        {/* New tab so reading it doesn't take people off the stream or chat. */}
+        <a href="/privacy" target="_blank" rel="noopener" className="underline hover:text-forest">
+          Privacy notice
+        </a>
       </p>
     </form>
   );

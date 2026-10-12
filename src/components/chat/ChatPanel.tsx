@@ -98,6 +98,18 @@ export default function ChatPanel() {
         >
           Join chat
         </button>
+        {/* Opens in a new tab so reading it doesn't take people off the stream. */}
+        <p className="text-xs text-muted">
+          Messages are public and kept for about 30 days.{" "}
+          <a
+            href="/privacy"
+            target="_blank"
+            rel="noopener"
+            className="underline hover:text-forest"
+          >
+            Privacy notice
+          </a>
+        </p>
       </form>
     );
   }

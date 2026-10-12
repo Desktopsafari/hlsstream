@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 const MAX_LENGTH = 2000;
 
@@ -79,6 +80,13 @@ export default function SuggestionForm() {
             {submitting ? "Sending…" : "Send suggestion"}
           </button>
           {error && <p className="text-sm text-amber">{error}</p>}
+          <p className="text-[11px] text-muted">
+            Your message is emailed to us and saved until we delete it. We don&apos;t ask for your
+            name or email.{" "}
+            <Link href="/privacy" className="underline hover:text-forest">
+              Privacy notice
+            </Link>
+          </p>
         </form>
       )}
     </section>

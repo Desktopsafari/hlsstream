@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type Category = { id: string; display_name: string };
 
@@ -100,6 +101,12 @@ export default function SubscribeForm() {
           </button>
           {message && <p className="text-sm text-forest">{message}</p>}
           {error && <p className="text-sm text-amber">{error}</p>}
+          <p className="text-[11px] text-muted">
+            We use your email only to send these updates.{" "}
+            <Link href="/privacy" className="underline hover:text-forest">
+              Privacy notice
+            </Link>
+          </p>
         </form>
       )}
     </section>

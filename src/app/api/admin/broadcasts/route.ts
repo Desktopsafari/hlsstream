@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getResendClient } from "@/lib/resend";
+import { withUnsubscribeFooter } from "@/lib/broadcastTemplate";
 import { SITE_NAME } from "@/config/constants";
 
 const PAGE_SIZE = 100;
@@ -100,7 +101,7 @@ export async function POST(request: Request) {
     segmentId: category.resend_audience_id,
     from: `${SITE_NAME} <updates@mail.desktopsafari.com>`,
     subject,
-    text: message,
+    text: withUnsubscribeFooter(message),
     send: true,
   });
 

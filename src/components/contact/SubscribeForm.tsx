@@ -50,7 +50,7 @@ export default function SubscribeForm() {
       return;
     }
 
-    setMessage("You're signed up! Check your inbox for a confirmation from Resend.");
+    setMessage("You're signed up! You'll get an email when there's news.");
     setEmail("");
     setSelected(new Set());
   }

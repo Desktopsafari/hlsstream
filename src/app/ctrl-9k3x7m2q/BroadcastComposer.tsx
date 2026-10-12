@@ -139,6 +139,9 @@ export default function BroadcastComposer() {
             rows={6}
             className="rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
           />
+          <p className="-mt-1 text-[11px] text-muted">
+            An unsubscribe link is added to the bottom of every announcement automatically.
+          </p>
           <div>
             <button
               type="submit"

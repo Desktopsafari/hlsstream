@@ -15,10 +15,11 @@ create table if not exists chat_messages (
 create index if not exists chat_messages_created_at_idx on chat_messages (created_at desc);
 
 alter table chat_messages enable row level security;
-create policy "chat_messages_public_read" on chat_messages
-  for select using (true);
--- No insert/update/delete policy for the public role: only the moderated
--- chat service (using the service_role key, which bypasses RLS) can write.
+-- No policy for the public role at all: only the moderated chat service
+-- (using the service_role key, which bypasses RLS) can read or write. The
+-- table holds each chatter's session id, so it must not be publicly
+-- readable (see supabase/chat_privacy.sql, which removed the old
+-- "chat_messages_public_read" policy from the live database).
 
 -- Bans/mutes by session id or IP address. Admin-only: no RLS policy at all
 -- means the anon/public role has zero access (not even read); only

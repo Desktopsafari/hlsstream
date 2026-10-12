@@ -15,6 +15,9 @@ export default function Footer() {
           <Link href="/privacy" className="hover:text-forest">
             Privacy
           </Link>
+          <Link href="/terms" className="hover:text-forest">
+            Terms
+          </Link>
           <span>Live stream availability may vary.</span>
         </div>
       </div>

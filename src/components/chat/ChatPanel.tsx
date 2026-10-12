@@ -109,6 +109,15 @@ export default function ChatPanel() {
           >
             Privacy notice
           </a>
+          {" · "}
+          <a
+            href="/terms"
+            target="_blank"
+            rel="noopener"
+            className="underline hover:text-forest"
+          >
+            Chat rules
+          </a>
         </p>
       </form>
     );

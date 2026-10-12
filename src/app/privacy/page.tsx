@@ -32,8 +32,8 @@ export default function PrivacyPage() {
             vote.
           </li>
           <li>
-            Your email address is only used if you sign up for updates, and every update has an
-            unsubscribe link.
+            Your email address is only used if you sign up for updates (including the support-page
+            notice), and every update has an unsubscribe link.
           </li>
           <li>
             Our server keeps ordinary access logs (including IP addresses) for about a week.
@@ -92,6 +92,18 @@ export default function PrivacyPage() {
           those updates. We do not ask for your name.
         </p>
         <p>
+          <strong>Support page notice.</strong> Our{" "}
+          <Link className="font-medium text-forest underline" href="/support">
+            support page
+          </Link>{" "}
+          has its own signup, for an email when ways to support the stream become available. We
+          collect your email address and the fact that you chose the &ldquo;Support page
+          announcements&rdquo; category, nothing else. The address is held in Resend, in a list
+          kept separate from our other update lists, and we use it only to tell you about the
+          support page. Every email has an unsubscribe link; unsubscribing stops the emails, and
+          you can email us to have the address removed completely.
+        </p>
+        <p>
           <strong>The contact box.</strong> If you send a suggestion, we store the text of your
           message. We don&rsquo;t ask for your name or email, so only include what you are happy
           for us to read. The message is also emailed to us.
@@ -147,9 +159,11 @@ export default function PrivacyPage() {
           </li>
         </LegalList>
         <p>
-          The Ko-fi button is just a link. Nothing from Ko-fi is loaded on this site, and Ko-fi
-          only gets involved if you click it, under its own privacy policy. We do not load
-          third-party scripts, fonts, ads or analytics.
+          The &ldquo;Support us&rdquo; button is just a link: for now it opens our own support
+          page, and once our Ko-fi page is open it will open Ko-fi in a new tab. Nothing from
+          Ko-fi is loaded on this site, and Ko-fi only gets involved if you click through to it,
+          under its own privacy policy. We do not load third-party scripts, fonts, ads or
+          analytics.
         </p>
         <p>
           These providers store data in their own locations and under their own policies. We
@@ -181,7 +195,9 @@ export default function PrivacyPage() {
                 </td>
               </tr>
               <tr className="border-b border-moss">
-                <td className="px-3 py-2">Email address on the updates list</td>
+                <td className="px-3 py-2">
+                  Email address on the updates lists (including the support-page notice)
+                </td>
                 <td className="px-3 py-2">
                   Until you ask us to remove it. Unsubscribing stops the emails.
                 </td>

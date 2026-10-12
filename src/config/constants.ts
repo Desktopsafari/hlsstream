@@ -35,6 +35,17 @@ export const POLL_CLOSE_HOUR = 20;
 // side of Vercel's Hobby-tier fair-use rules -- don't point it at a shop.
 export const KOFI_URL = "https://ko-fi.com/desktopsafari";
 
+// Flip to true once the Ko-fi page is open. While false, every "Support us"
+// link goes to the internal /support page (which offers a launch-notice
+// signup); when true the header links straight to Ko-fi in a new tab and
+// /support redirects there.
+export const SUPPORT_PAGE_LIVE = false;
+
+// Notification category (a Resend segment) for the /support signup. Created
+// from the admin panel with exactly this display name. The Contact page's
+// signup hides it; /support shows only it.
+export const SUPPORT_CATEGORY_NAME = "Support page announcements";
+
 // The one stream that exists today. Species cards are keyed by stream id so
 // the future multi-stream map can add more without restructuring.
 export const STREAM_ID = "main";

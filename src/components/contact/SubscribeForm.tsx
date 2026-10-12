@@ -2,10 +2,24 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { SUPPORT_CATEGORY_NAME } from "@/config/constants";
 
 type Category = { id: string; display_name: string };
 
-export default function SubscribeForm() {
+type Props = {
+  // Show only the category with this display name, pre-checked. Without it the
+  // form lists every category except the support-page one (that has its own
+  // signup on /support).
+  onlyCategory?: string;
+  intro?: string;
+  successMessage?: string;
+};
+
+export default function SubscribeForm({
+  onlyCategory,
+  intro = "Get an email when there's news. Unsubscribe anytime via the link in any email you receive.",
+  successMessage = "You're signed up! You'll get an email when there's news.",
+}: Props) {
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [email, setEmail] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -16,9 +30,16 @@ export default function SubscribeForm() {
   useEffect(() => {
     fetch("/api/notification-categories")
       .then((r) => r.json())
-      .then((data) => setCategories(data.categories ?? []))
+      .then((data) => {
+        const all: Category[] = data.categories ?? [];
+        const shown = onlyCategory
+          ? all.filter((c) => c.display_name === onlyCategory)
+          : all.filter((c) => c.display_name !== SUPPORT_CATEGORY_NAME);
+        setCategories(shown);
+        if (onlyCategory) setSelected(new Set(shown.map((c) => c.id)));
+      })
       .catch(() => setCategories([]));
-  }, []);
+  }, [onlyCategory]);
 
   function toggle(id: string) {
     const next = new Set(selected);
@@ -51,18 +72,15 @@ export default function SubscribeForm() {
       return;
     }
 
-    setMessage("You're signed up! You'll get an email when there's news.");
+    setMessage(successMessage);
     setEmail("");
-    setSelected(new Set());
+    setSelected(onlyCategory ? new Set(categories?.map((c) => c.id)) : new Set());
   }
 
   return (
     <section className="rounded-xl border border-moss bg-card p-5 shadow-sm">
-      <h2 className="mb-1 font-heading text-lg font-semibold text-forest">Stay Updated</h2>
-      <p className="mb-4 text-sm text-muted">
-        Get an email when there's news. Unsubscribe anytime via the link in any email you
-        receive.
-      </p>
+      <h2 className="mb-1 font-heading text-lg font-semibold text-forest">Stay Notified</h2>
+      <p className="mb-4 text-sm text-muted">{intro}</p>
 
       {categories === null && <p className="text-sm text-muted">Loading…</p>}
       {categories?.length === 0 && (

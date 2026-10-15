@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { POLL_REFRESH_INTERVAL_MS } from "@/config/constants";
 import { getSessionId } from "@/lib/session";
 
@@ -9,7 +10,31 @@ type PollOption = {
   label: string;
   display_order: number;
   vote_count: number;
+  // Optional picture; absent/null for options without one (and for every
+  // option until supabase/poll_option_images.sql has been run).
+  image_url?: string | null;
 };
+
+// Square crop of an option's picture. If the file is missing or fails to load
+// it renders nothing, so the option falls back to looking like a plain one.
+function OptionPicture({ url, alt, className }: { url: string; alt: string; className: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <span
+      className={`relative shrink-0 overflow-hidden rounded-md border border-moss bg-moss/40 ${className}`}
+    >
+      <Image
+        src={url}
+        alt={alt}
+        fill
+        sizes="64px"
+        className="object-cover"
+        onError={() => setFailed(true)}
+      />
+    </span>
+  );
+}
 
 type Poll = {
   id: string;
@@ -97,23 +122,44 @@ export default function PollCard() {
       </p>
 
       {!showResults &&
-        options.map((opt) => (
-          <button
-            key={opt.option_id}
-            onClick={() => vote(opt.option_id)}
-            disabled={submitting}
-            className="rounded-md border border-moss bg-parchment px-3 py-2 text-left text-sm text-ink hover:border-forest disabled:opacity-50"
-          >
-            {opt.label}
-          </button>
-        ))}
+        options.map((opt) =>
+          opt.image_url ? (
+            // The picture sits inside the button, so the whole row is still
+            // the tap target. aria-label keeps the accessible name exactly the
+            // option's label (the picture's alt would otherwise be read too).
+            <button
+              key={opt.option_id}
+              onClick={() => vote(opt.option_id)}
+              disabled={submitting}
+              aria-label={opt.label}
+              className="flex items-center gap-3 rounded-md border border-moss bg-parchment px-3 py-2 text-left text-sm text-ink hover:border-forest disabled:opacity-50"
+            >
+              <OptionPicture
+                key={opt.image_url}
+                url={opt.image_url}
+                alt={opt.label}
+                className="h-14 w-14 sm:h-16 sm:w-16"
+              />
+              <span>{opt.label}</span>
+            </button>
+          ) : (
+            <button
+              key={opt.option_id}
+              onClick={() => vote(opt.option_id)}
+              disabled={submitting}
+              className="rounded-md border border-moss bg-parchment px-3 py-2 text-left text-sm text-ink hover:border-forest disabled:opacity-50"
+            >
+              {opt.label}
+            </button>
+          ),
+        )}
 
       {showResults &&
         options.map((opt) => {
           const pct = totalVotes > 0 ? Math.round((opt.vote_count / totalVotes) * 100) : 0;
           const isMine = opt.option_id === votedOptionId;
-          return (
-            <div key={opt.option_id} className="text-sm">
+          const body = (
+            <>
               <div className="flex justify-between">
                 <span className={isMine ? "font-semibold text-forest" : "text-ink"}>
                   {opt.label}
@@ -126,6 +172,20 @@ export default function PollCard() {
               <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-moss">
                 <div className="h-full bg-amber" style={{ width: `${pct}%` }} />
               </div>
+            </>
+          );
+          if (!opt.image_url) {
+            return (
+              <div key={opt.option_id} className="text-sm">
+                {body}
+              </div>
+            );
+          }
+          return (
+            <div key={opt.option_id} className="flex items-center gap-3">
+              {/* The label is right next to it, so the picture is decorative here. */}
+              <OptionPicture key={opt.image_url} url={opt.image_url} alt="" className="h-10 w-10" />
+              <div className="min-w-0 flex-1 text-sm">{body}</div>
             </div>
           );
         })}

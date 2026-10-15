@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import PollEditor from "./PollEditor";
+import OpenNowPanel from "./OpenNowPanel";
+import OptionImageField from "./OptionImageField";
 import SpeciesAdmin from "./SpeciesAdmin";
 import SuggestionEventAdmin from "./SuggestionEventAdmin";
 import NotificationCategoriesAdmin from "./NotificationCategoriesAdmin";
@@ -14,6 +17,7 @@ type PollOptionResult = {
   label: string;
   display_order: number;
   vote_count: number;
+  image_url: string | null;
 };
 
 type Poll = {
@@ -26,7 +30,21 @@ type Poll = {
   options: PollOptionResult[];
   repeat_daily: boolean;
   repeat_paused: boolean;
+  opened_early: boolean;
 };
+
+// An option in the Set Next Poll form. A picture chosen there is uploaded
+// straight away and waits (imagePath) until the poll is saved.
+type FormOption = { label: string; imagePath: string | null; imageUrl: string | null };
+const blankOption = (): FormOption => ({ label: "", imagePath: null, imageUrl: null });
+
+function formatEastern(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
 
 type Ban = {
   id: string;
@@ -43,10 +61,16 @@ export default function AdminDashboard() {
   const [editingPollId, setEditingPollId] = useState<string | null>(null);
 
   const [question, setQuestion] = useState("");
-  const [options, setOptions] = useState(["", ""]);
+  const [options, setOptions] = useState<FormOption[]>([blankOption(), blankOption()]);
   const [repeatDaily, setRepeatDaily] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
+  const [pollNotice, setPollNotice] = useState<string | null>(null);
   const [pollSubmitting, setPollSubmitting] = useState(false);
+  const [imagesSupported, setImagesSupported] = useState(false);
+  // Which Open now confirmation is showing: the form's, or a queued poll's.
+  const [openNowFor, setOpenNowFor] = useState<{ kind: "form" } | { kind: "poll"; pollId: string } | null>(
+    null,
+  );
 
   const [banTarget, setBanTarget] = useState("");
   const [banReason, setBanReason] = useState("");
@@ -57,6 +81,7 @@ export default function AdminDashboard() {
     if (res.ok) {
       const data = await res.json();
       setPolls(data.polls);
+      setImagesSupported(data.imagesSupported === true);
     }
   }
 
@@ -78,19 +103,26 @@ export default function AdminDashboard() {
     router.push("/");
   }
 
-  async function submitPoll(e: React.FormEvent) {
-    e.preventDefault();
+  const filledOptions = options
+    .filter((o) => o.label.trim().length > 0)
+    .map((o) => ({ label: o.label, imagePath: o.imagePath }));
+
+  function resetPollForm() {
+    setQuestion("");
+    setOptions([blankOption(), blankOption()]);
+    setRepeatDaily(false);
+  }
+
+  async function queuePoll() {
     setPollError(null);
+    setPollNotice(null);
+    setOpenNowFor(null);
     setPollSubmitting(true);
 
     const res = await fetch("/api/admin/polls", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        question,
-        options: options.filter((o) => o.trim().length > 0),
-        repeatDaily,
-      }),
+      body: JSON.stringify({ question, options: filledOptions, repeatDaily }),
     });
 
     setPollSubmitting(false);
@@ -101,10 +133,50 @@ export default function AdminDashboard() {
       return;
     }
 
-    setQuestion("");
-    setOptions(["", ""]);
-    setRepeatDaily(false);
+    resetPollForm();
     loadPolls();
+  }
+
+  function submitPoll(e: React.FormEvent) {
+    e.preventDefault();
+    queuePoll();
+  }
+
+  function startFormOpenNow() {
+    setPollError(null);
+    setPollNotice(null);
+    if (question.trim().length === 0 || filledOptions.length < 2) {
+      setPollError("Need a question and at least 2 non-empty options.");
+      return;
+    }
+    setOpenNowFor({ kind: "form" });
+  }
+
+  // Pictures picked in the form upload right away and wait as "pending" files
+  // until the poll is saved; replacing or removing one deletes the old file.
+  async function uploadFormPicture(index: number, file: File): Promise<string | null> {
+    const body = new FormData();
+    body.append("file", file);
+    const res = await fetch("/api/admin/polls/image", { method: "POST", body });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return data.error ?? "Upload failed.";
+    const previous = options[index].imagePath;
+    setOptions((prev) =>
+      prev.map((o, i) => (i === index ? { ...o, imagePath: data.path, imageUrl: data.url } : o)),
+    );
+    if (previous) {
+      await fetch(`/api/admin/polls/image?path=${encodeURIComponent(previous)}`, { method: "DELETE" });
+    }
+    return null;
+  }
+
+  async function removeFormPicture(index: number): Promise<string | null> {
+    const previous = options[index].imagePath;
+    setOptions((prev) => prev.map((o, i) => (i === index ? { ...o, imagePath: null, imageUrl: null } : o)));
+    if (previous) {
+      await fetch(`/api/admin/polls/image?path=${encodeURIComponent(previous)}`, { method: "DELETE" });
+    }
+    return null;
   }
 
   async function submitBan(e: React.FormEvent) {
@@ -162,18 +234,33 @@ export default function AdminDashboard() {
             className="rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
           />
           {options.map((opt, i) => (
-            <input
-              key={i}
-              value={opt}
-              onChange={(e) => {
-                const next = [...options];
-                next[i] = e.target.value;
-                setOptions(next);
-              }}
-              placeholder={`Option ${i + 1}`}
-              className="rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
-            />
+            <div key={i} className="flex flex-col gap-2">
+              <input
+                value={opt.label}
+                onChange={(e) => {
+                  const next = [...options];
+                  next[i] = { ...next[i], label: e.target.value };
+                  setOptions(next);
+                }}
+                placeholder={`Option ${i + 1}`}
+                className="rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
+              />
+              {imagesSupported && (
+                <OptionImageField
+                  url={opt.imageUrl}
+                  label={opt.label || `option ${i + 1}`}
+                  onUpload={(file) => uploadFormPicture(i, file)}
+                  onRemove={() => removeFormPicture(i)}
+                />
+              )}
+            </div>
           ))}
+          {!imagesSupported && (
+            <p className="text-[11px] text-muted">
+              Option pictures are off until supabase/poll_option_images.sql has been run in the
+              Supabase SQL Editor.
+            </p>
+          )}
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
@@ -183,10 +270,10 @@ export default function AdminDashboard() {
             />
             Repeat this poll daily
           </label>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setOptions([...options, ""])}
+              onClick={() => setOptions([...options, blankOption()])}
               className="rounded-md border border-moss px-3 py-1.5 text-sm text-forest hover:bg-parchment"
             >
               + Add option
@@ -198,8 +285,34 @@ export default function AdminDashboard() {
             >
               Queue poll
             </button>
+            <button
+              type="button"
+              onClick={startFormOpenNow}
+              disabled={pollSubmitting || openNowFor?.kind === "form"}
+              className="rounded-md border border-forest px-3 py-1.5 text-sm font-semibold text-forest hover:bg-parchment disabled:opacity-50"
+            >
+              Open now
+            </button>
           </div>
+          <p className="text-[11px] text-muted">
+            Queue poll opens it at the next noon. Open now makes it live immediately; voting still
+            ends at 8:00 PM ET.
+          </p>
+          {openNowFor?.kind === "form" && (
+            <OpenNowPanel
+              newPoll={{ question, options: filledOptions, repeatDaily }}
+              onCancel={() => setOpenNowFor(null)}
+              onQueueInstead={queuePoll}
+              onOpened={(message) => {
+                setOpenNowFor(null);
+                resetPollForm();
+                setPollNotice(message);
+                loadPolls();
+              }}
+            />
+          )}
           {pollError && <p className="text-sm text-amber">{pollError}</p>}
+          {pollNotice && <p className="text-sm text-forest">{pollNotice}</p>}
         </form>
       </section>
 
@@ -213,7 +326,11 @@ export default function AdminDashboard() {
               <PollEditor
                 key={poll.id}
                 poll={poll}
-                onCancel={() => setEditingPollId(null)}
+                imagesSupported={imagesSupported}
+                onCancel={() => {
+                  setEditingPollId(null);
+                  loadPolls();
+                }}
                 onSaved={() => {
                   setEditingPollId(null);
                   loadPolls();
@@ -225,6 +342,15 @@ export default function AdminDashboard() {
                   <p className="text-sm font-semibold text-ink">{poll.question}</p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs uppercase text-muted">{poll.status}</span>
+                    {poll.status === "scheduled" && (
+                      <button
+                        onClick={() => setOpenNowFor({ kind: "poll", pollId: poll.id })}
+                        disabled={openNowFor?.kind === "poll" && openNowFor.pollId === poll.id}
+                        className="rounded-md border border-forest px-2 py-1 text-xs font-semibold text-forest hover:bg-parchment disabled:opacity-50"
+                      >
+                        Open now
+                      </button>
+                    )}
                     {poll.status !== "closed" && (
                       <button
                         onClick={() => setEditingPollId(poll.id)}
@@ -244,10 +370,35 @@ export default function AdminDashboard() {
                     cycle.
                   </p>
                 )}
+                {poll.opened_early && (
+                  <p className="mt-1 text-xs text-amber">
+                    ⚡ Opened early with Open now at {formatEastern(poll.opens_at)} ET
+                  </p>
+                )}
+                {openNowFor?.kind === "poll" && openNowFor.pollId === poll.id && (
+                  <div className="mt-2">
+                    <OpenNowPanel
+                      pollId={poll.id}
+                      onCancel={() => setOpenNowFor(null)}
+                      onOpened={(message) => {
+                        setOpenNowFor(null);
+                        setPollNotice(message);
+                        loadPolls();
+                      }}
+                    />
+                  </div>
+                )}
                 <ul className="mt-1 text-sm text-muted">
                   {poll.options.map((o) => (
-                    <li key={o.option_id}>
-                      {o.label}: {o.vote_count}
+                    <li key={o.option_id} className={o.image_url ? "flex items-center gap-2" : undefined}>
+                      {o.image_url && (
+                        <span className="relative h-7 w-7 shrink-0 overflow-hidden rounded border border-moss">
+                          <Image src={o.image_url} alt="" fill sizes="28px" className="object-cover" />
+                        </span>
+                      )}
+                      <span>
+                        {o.label}: {o.vote_count}
+                      </span>
                     </li>
                   ))}
                 </ul>

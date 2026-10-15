@@ -54,7 +54,8 @@ export const STREAM_ID = "main";
 export const SPECIES_BUCKET = "species-images";
 
 // Public Supabase Storage bucket holding the frog pictures on suggestion
-// events (same 4MB / JPG-PNG-WebP limits as the species bucket).
+// events (same 4MB / JPG-PNG-WebP limits as the species bucket). Poll option
+// pictures live in the same bucket under a polls/ prefix.
 export const EVENT_BUCKET = "event-images";
 
 // Suggestion events: name ideas are short, and a visitor may reasonably send

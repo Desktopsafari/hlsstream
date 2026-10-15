@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getOpenNowInfo, openPollNow } from "@/lib/pollLifecycle";
-import { createPollWithOptions, deletePollWithFiles, parseNewOptions } from "@/lib/pollAdmin";
+import {
+  createPollWithOptions,
+  deletePollWithFiles,
+  parseNewOptions,
+  parsePendingImage,
+} from "@/lib/pollAdmin";
 
 // What the admin sees before confirming "Open now": how long voting would run,
 // whether it's allowed at all, and what happens to a poll that is already
@@ -27,11 +32,15 @@ export async function POST(request: Request) {
   if (!pollId) {
     const options = parseNewOptions(body?.options);
     const question = body?.question;
+    const imagePath = parsePendingImage(body?.imagePath);
     if (typeof question !== "string" || question.trim().length === 0 || !options) {
       return NextResponse.json(
         { error: "Need a question and at least 2 non-empty options." },
         { status: 400 },
       );
+    }
+    if (imagePath === undefined) {
+      return NextResponse.json({ error: "That picture isn't a valid upload." }, { status: 400 });
     }
 
     // Refuse before creating anything if it can't go live anyway.
@@ -50,6 +59,7 @@ export async function POST(request: Request) {
       question,
       options,
       repeatDaily: body?.repeatDaily === true,
+      imagePath,
     });
     if (!created.ok) {
       return NextResponse.json({ error: created.error }, { status: created.status });

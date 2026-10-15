@@ -1,3 +1,7 @@
+-- SUPERSEDED: pictures now go on the poll question (supabase/poll_question_image.sql).
+-- The site no longer reads or writes this column. It was already run on the live
+-- database and is left in place, unused; there is no need to run this file again.
+--
 -- Adds an optional picture to each poll option.
 -- Run this once in the Supabase SQL Editor (Dashboard -> SQL Editor -> New query -> paste -> Run).
 -- Safe to run more than once. Until it is run the site keeps working exactly as

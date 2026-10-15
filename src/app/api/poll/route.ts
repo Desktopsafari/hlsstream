@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { isPollPastCutoff } from "@/lib/pollSchedule";
-import { loadOptionImagePaths, pollImageUrl } from "@/lib/pollImages";
+import { loadPollImagePaths, pollImageUrl } from "@/lib/pollImages";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -47,14 +47,10 @@ export async function GET(request: Request) {
     .eq("poll_id", poll.id)
     .order("display_order", { ascending: true });
 
-  // Option pictures live in poll_options (the poll_results view doesn't carry
-  // them). Null when supabase/poll_option_images.sql hasn't been run, in which
-  // case every option simply has no picture.
-  const imagePaths = await loadOptionImagePaths(supabase, [poll.id]);
-  const optionsWithPictures = (options ?? []).map((o) => ({
-    ...o,
-    image_url: pollImageUrl(imagePaths?.get(o.option_id) ?? null),
-  }));
+  // The poll's optional picture. Null when it has none, and also when
+  // supabase/poll_question_image.sql hasn't been run (no column to read).
+  const imagePaths = await loadPollImagePaths(supabase, [poll.id]);
+  const imageUrl = pollImageUrl(imagePaths?.get(poll.id) ?? null);
 
   let hasVoted = false;
   let votedOptionId: string | null = null;
@@ -74,8 +70,8 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({
-    poll,
-    options: optionsWithPictures,
+    poll: { ...poll, image_url: imageUrl },
+    options: options ?? [],
     hasVoted,
     votedOptionId,
   });

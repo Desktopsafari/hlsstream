@@ -6,22 +6,16 @@ import Image from "next/image";
 const MAX_BYTES = 4 * 1024 * 1024;
 const TYPES = ["image/jpeg", "image/png", "image/webp"];
 
-// Picture picker for one poll option: uploads as soon as a file is chosen,
+// Picture picker for a poll's question: uploads as soon as a file is chosen,
 // with Replace and Remove once there is one. Same look and limits as the
 // naming event's frog pictures. The parent decides where the file goes
-// (onUpload / onRemove) and whether the field is locked.
-export default function OptionImageField({
+// (onUpload / onRemove).
+export default function PollImageField({
   url,
-  label,
-  locked = false,
-  lockedNote,
   onUpload,
   onRemove,
 }: {
   url: string | null;
-  label: string;
-  locked?: boolean;
-  lockedNote?: string;
   // Resolve to an error message, or null on success.
   onUpload: (file: File) => Promise<string | null>;
   onRemove: () => Promise<string | null>;
@@ -55,9 +49,9 @@ export default function OptionImageField({
 
   return (
     <div className="flex items-center gap-3">
-      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-moss bg-moss/40">
+      <div className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-md border border-moss bg-moss/40">
         {url ? (
-          <Image src={url} alt="" fill sizes="48px" className="object-cover" />
+          <Image src={url} alt="" fill sizes="112px" className="object-cover" />
         ) : (
           <div className="flex h-full items-center justify-center text-[10px] text-muted">
             No picture
@@ -68,18 +62,16 @@ export default function OptionImageField({
         <div className="flex items-center gap-2">
           <label
             className={`rounded-md border border-moss px-2 py-1 text-xs focus-within:ring-2 focus-within:ring-forest ${
-              locked || busy
-                ? "cursor-not-allowed text-forest/50"
-                : "cursor-pointer text-forest hover:bg-parchment"
+              busy ? "cursor-not-allowed text-forest/50" : "cursor-pointer text-forest hover:bg-parchment"
             }`}
           >
             {busy ? "Working…" : url ? "Replace" : "Add picture"}
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
-              aria-label={`Picture for ${label || "this option"}`}
+              aria-label="Picture for the poll question"
               className="sr-only"
-              disabled={locked || busy}
+              disabled={busy}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = "";
@@ -91,14 +83,14 @@ export default function OptionImageField({
             <button
               type="button"
               onClick={remove}
-              disabled={locked || busy}
+              disabled={busy}
               className="rounded-md border border-moss px-2 py-1 text-xs text-muted hover:bg-parchment disabled:cursor-not-allowed disabled:opacity-50"
             >
               Remove
             </button>
           )}
         </div>
-        {locked && lockedNote && <p className="text-[11px] text-muted">{lockedNote}</p>}
+        <p className="text-[11px] text-muted">Landscape works best, about 1200 x 675.</p>
         {error && <p className="text-xs text-amber">{error}</p>}
       </div>
     </div>

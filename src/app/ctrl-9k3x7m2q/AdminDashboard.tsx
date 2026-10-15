@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import PollEditor from "./PollEditor";
 import OpenNowPanel from "./OpenNowPanel";
-import OptionImageField from "./OptionImageField";
+import PollImageField from "./PollImageField";
 import SpeciesAdmin from "./SpeciesAdmin";
 import SuggestionEventAdmin from "./SuggestionEventAdmin";
 import NotificationCategoriesAdmin from "./NotificationCategoriesAdmin";
@@ -17,7 +17,6 @@ type PollOptionResult = {
   label: string;
   display_order: number;
   vote_count: number;
-  image_url: string | null;
 };
 
 type Poll = {
@@ -31,12 +30,8 @@ type Poll = {
   repeat_daily: boolean;
   repeat_paused: boolean;
   opened_early: boolean;
+  image_url: string | null;
 };
-
-// An option in the Set Next Poll form. A picture chosen there is uploaded
-// straight away and waits (imagePath) until the poll is saved.
-type FormOption = { label: string; imagePath: string | null; imageUrl: string | null };
-const blankOption = (): FormOption => ({ label: "", imagePath: null, imageUrl: null });
 
 function formatEastern(iso: string): string {
   return new Date(iso).toLocaleString("en-US", {
@@ -61,7 +56,10 @@ export default function AdminDashboard() {
   const [editingPollId, setEditingPollId] = useState<string | null>(null);
 
   const [question, setQuestion] = useState("");
-  const [options, setOptions] = useState<FormOption[]>([blankOption(), blankOption()]);
+  const [options, setOptions] = useState(["", ""]);
+  // The question's picture: uploaded as soon as it's picked and kept as a
+  // "pending" file (imagePath) until the poll is saved.
+  const [image, setImage] = useState<{ path: string; url: string | null } | null>(null);
   const [repeatDaily, setRepeatDaily] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
   const [pollNotice, setPollNotice] = useState<string | null>(null);
@@ -103,13 +101,12 @@ export default function AdminDashboard() {
     router.push("/");
   }
 
-  const filledOptions = options
-    .filter((o) => o.label.trim().length > 0)
-    .map((o) => ({ label: o.label, imagePath: o.imagePath }));
+  const filledOptions = options.filter((o) => o.trim().length > 0);
 
   function resetPollForm() {
     setQuestion("");
-    setOptions([blankOption(), blankOption()]);
+    setOptions(["", ""]);
+    setImage(null);
     setRepeatDaily(false);
   }
 
@@ -122,7 +119,7 @@ export default function AdminDashboard() {
     const res = await fetch("/api/admin/polls", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, options: filledOptions, repeatDaily }),
+      body: JSON.stringify({ question, options: filledOptions, repeatDaily, imagePath: image?.path ?? null }),
     });
 
     setPollSubmitting(false);
@@ -152,27 +149,25 @@ export default function AdminDashboard() {
     setOpenNowFor({ kind: "form" });
   }
 
-  // Pictures picked in the form upload right away and wait as "pending" files
-  // until the poll is saved; replacing or removing one deletes the old file.
-  async function uploadFormPicture(index: number, file: File): Promise<string | null> {
+  // The picture picked in the form uploads right away and waits as a "pending"
+  // file until the poll is saved; replacing or removing it deletes the old file.
+  async function uploadFormPicture(file: File): Promise<string | null> {
     const body = new FormData();
     body.append("file", file);
     const res = await fetch("/api/admin/polls/image", { method: "POST", body });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return data.error ?? "Upload failed.";
-    const previous = options[index].imagePath;
-    setOptions((prev) =>
-      prev.map((o, i) => (i === index ? { ...o, imagePath: data.path, imageUrl: data.url } : o)),
-    );
+    const previous = image?.path;
+    setImage({ path: data.path, url: data.url });
     if (previous) {
       await fetch(`/api/admin/polls/image?path=${encodeURIComponent(previous)}`, { method: "DELETE" });
     }
     return null;
   }
 
-  async function removeFormPicture(index: number): Promise<string | null> {
-    const previous = options[index].imagePath;
-    setOptions((prev) => prev.map((o, i) => (i === index ? { ...o, imagePath: null, imageUrl: null } : o)));
+  async function removeFormPicture(): Promise<string | null> {
+    const previous = image?.path;
+    setImage(null);
     if (previous) {
       await fetch(`/api/admin/polls/image?path=${encodeURIComponent(previous)}`, { method: "DELETE" });
     }
@@ -233,34 +228,27 @@ export default function AdminDashboard() {
             placeholder="Poll question"
             className="rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
           />
-          {options.map((opt, i) => (
-            <div key={i} className="flex flex-col gap-2">
-              <input
-                value={opt.label}
-                onChange={(e) => {
-                  const next = [...options];
-                  next[i] = { ...next[i], label: e.target.value };
-                  setOptions(next);
-                }}
-                placeholder={`Option ${i + 1}`}
-                className="rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
-              />
-              {imagesSupported && (
-                <OptionImageField
-                  url={opt.imageUrl}
-                  label={opt.label || `option ${i + 1}`}
-                  onUpload={(file) => uploadFormPicture(i, file)}
-                  onRemove={() => removeFormPicture(i)}
-                />
-              )}
-            </div>
-          ))}
-          {!imagesSupported && (
+          {imagesSupported ? (
+            <PollImageField url={image?.url ?? null} onUpload={uploadFormPicture} onRemove={removeFormPicture} />
+          ) : (
             <p className="text-[11px] text-muted">
-              Option pictures are off until supabase/poll_option_images.sql has been run in the
+              The poll picture is off until supabase/poll_question_image.sql has been run in the
               Supabase SQL Editor.
             </p>
           )}
+          {options.map((opt, i) => (
+            <input
+              key={i}
+              value={opt}
+              onChange={(e) => {
+                const next = [...options];
+                next[i] = e.target.value;
+                setOptions(next);
+              }}
+              placeholder={`Option ${i + 1}`}
+              className="rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
+            />
+          ))}
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
@@ -273,7 +261,7 @@ export default function AdminDashboard() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setOptions([...options, blankOption()])}
+              onClick={() => setOptions([...options, ""])}
               className="rounded-md border border-moss px-3 py-1.5 text-sm text-forest hover:bg-parchment"
             >
               + Add option
@@ -300,7 +288,7 @@ export default function AdminDashboard() {
           </p>
           {openNowFor?.kind === "form" && (
             <OpenNowPanel
-              newPoll={{ question, options: filledOptions, repeatDaily }}
+              newPoll={{ question, options: filledOptions, repeatDaily, imagePath: image?.path ?? null }}
               onCancel={() => setOpenNowFor(null)}
               onQueueInstead={queuePoll}
               onOpened={(message) => {
@@ -339,7 +327,14 @@ export default function AdminDashboard() {
             ) : (
               <div key={poll.id} className="border-b border-moss pb-3 last:border-0">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-ink">{poll.question}</p>
+                  <div className="flex min-w-0 items-center gap-2">
+                    {poll.image_url && (
+                      <span className="relative aspect-video w-12 shrink-0 overflow-hidden rounded border border-moss">
+                        <Image src={poll.image_url} alt="" fill sizes="48px" className="object-cover" />
+                      </span>
+                    )}
+                    <p className="text-sm font-semibold text-ink">{poll.question}</p>
+                  </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs uppercase text-muted">{poll.status}</span>
                     {poll.status === "scheduled" && (
@@ -390,15 +385,8 @@ export default function AdminDashboard() {
                 )}
                 <ul className="mt-1 text-sm text-muted">
                   {poll.options.map((o) => (
-                    <li key={o.option_id} className={o.image_url ? "flex items-center gap-2" : undefined}>
-                      {o.image_url && (
-                        <span className="relative h-7 w-7 shrink-0 overflow-hidden rounded border border-moss">
-                          <Image src={o.image_url} alt="" fill sizes="28px" className="object-cover" />
-                        </span>
-                      )}
-                      <span>
-                        {o.label}: {o.vote_count}
-                      </span>
+                    <li key={o.option_id}>
+                      {o.label}: {o.vote_count}
                     </li>
                   ))}
                 </ul>

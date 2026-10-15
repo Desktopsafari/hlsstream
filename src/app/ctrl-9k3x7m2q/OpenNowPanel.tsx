@@ -29,7 +29,7 @@ export default function OpenNowPanel({
   onQueueInstead,
 }: {
   pollId?: string;
-  newPoll?: { question: string; options: { label: string; imagePath: string | null }[]; repeatDaily: boolean };
+  newPoll?: { question: string; options: string[]; repeatDaily: boolean; imagePath: string | null };
   onOpened: (message: string) => void;
   onCancel: () => void;
   // Form only: queue the poll for tomorrow's noon instead (shown after 8pm).

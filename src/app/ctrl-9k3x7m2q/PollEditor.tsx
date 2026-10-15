@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import OptionImageField from "./OptionImageField";
+import PollImageField from "./PollImageField";
 
 type PollOptionResult = {
   option_id: string;
   label: string;
   display_order: number;
   vote_count: number;
-  image_url: string | null;
 };
 
 type EditablePoll = {
@@ -18,12 +17,10 @@ type EditablePoll = {
   options: PollOptionResult[];
   repeat_daily: boolean;
   repeat_paused: boolean;
+  image_url: string | null;
 };
 
-// Existing options have an id and their picture is stored on the option itself
-// (changes apply immediately). A new option has no id yet, so a picture picked
-// for it is a pending upload that's attached when the poll is saved.
-type EditOption = { id?: string; label: string; imageUrl: string | null; pendingPath: string | null };
+type EditOption = { id?: string; label: string };
 
 export default function PollEditor({
   poll,
@@ -44,59 +41,42 @@ export default function PollEditor({
   const [options, setOptions] = useState<EditOption[]>(
     [...poll.options]
       .sort((a, b) => a.display_order - b.display_order)
-      .map((o) => ({ id: o.option_id, label: o.label, imageUrl: o.image_url, pendingPath: null })),
+      .map((o) => ({ id: o.option_id, label: o.label })),
   );
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [imageUrl, setImageUrl] = useState(poll.image_url);
 
-  const lockedExplanation = `This poll already has ${totalVotes} vote${
-    totalVotes === 1 ? "" : "s"
-  }, so its options and pictures are locked. Adding, removing, renaming, or changing the picture of an option now would leave existing votes attached to options that no longer mean the same thing. You can still edit the question text (for example, to fix a typo).`;
-
-  function blockedAction() {
-    setNotice(lockedExplanation);
-  }
-
-  function patchOption(index: number, patch: Partial<EditOption>) {
-    setOptions((prev) => prev.map((o, i) => (i === index ? { ...o, ...patch } : o)));
-  }
-
-  async function deletePending(path: string | null) {
-    if (path) await fetch(`/api/admin/polls/image?path=${encodeURIComponent(path)}`, { method: "DELETE" });
-  }
-
-  async function uploadPicture(index: number, file: File): Promise<string | null> {
-    const opt = options[index];
+  // The picture follows the question text's rule: editable here (queued or
+  // open) even when votes exist, and it applies right away rather than on Save.
+  async function uploadPicture(file: File): Promise<string | null> {
     const body = new FormData();
     body.append("file", file);
-    if (opt.id) body.append("optionId", opt.id);
+    body.append("pollId", poll.id);
     const res = await fetch("/api/admin/polls/image", { method: "POST", body });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return data.error ?? "Upload failed.";
-    if (opt.id) {
-      patchOption(index, { imageUrl: data.url });
-    } else {
-      patchOption(index, { imageUrl: data.url, pendingPath: data.path });
-      await deletePending(opt.pendingPath);
-    }
+    setImageUrl(data.url);
     return null;
   }
 
-  async function removePicture(index: number): Promise<string | null> {
-    const opt = options[index];
-    if (opt.id) {
-      const res = await fetch(`/api/admin/polls/image?optionId=${opt.id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        return data.error ?? "Couldn't remove the picture.";
-      }
-      patchOption(index, { imageUrl: null });
-      return null;
+  async function removePicture(): Promise<string | null> {
+    const res = await fetch(`/api/admin/polls/image?pollId=${poll.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return data.error ?? "Couldn't remove the picture.";
     }
-    patchOption(index, { imageUrl: null, pendingPath: null });
-    await deletePending(opt.pendingPath);
+    setImageUrl(null);
     return null;
+  }
+
+  const lockedExplanation = `This poll already has ${totalVotes} vote${
+    totalVotes === 1 ? "" : "s"
+  }, so its options are locked. Adding, removing, or renaming an option now would leave existing votes attached to options that no longer mean the same thing. You can still edit the question text (for example, to fix a typo).`;
+
+  function blockedAction() {
+    setNotice(lockedExplanation);
   }
 
   async function save() {
@@ -109,11 +89,7 @@ export default function PollEditor({
       body: JSON.stringify({
         pollId: poll.id,
         question,
-        options: options.map((o) => ({
-          id: o.id,
-          label: o.label,
-          imagePath: o.id ? undefined : (o.pendingPath ?? undefined),
-        })),
+        options: options.map((o) => ({ id: o.id, label: o.label })),
         repeatDaily,
       }),
     });
@@ -141,9 +117,19 @@ export default function PollEditor({
         className="rounded-md border border-moss bg-card px-3 py-2 text-sm text-ink outline-none focus:border-forest"
       />
 
+      {imagesSupported && (
+        <div className="flex flex-col gap-1">
+          <PollImageField url={imageUrl} onUpload={uploadPicture} onRemove={removePicture} />
+          <p className="text-[11px] text-muted">
+            The picture can be changed any time before the poll closes, even after votes come in
+            (like the question). It applies right away, not on Save.
+          </p>
+        </div>
+      )}
+
       {locked && (
         <p className="rounded-md border border-amber/50 bg-card p-2 text-xs text-ink">
-          Options and pictures are locked because votes exist. Only the question can be edited.
+          Options are locked because votes exist. Only the question{imagesSupported ? " and its picture" : ""} can be edited.
         </p>
       )}
 
@@ -158,47 +144,37 @@ export default function PollEditor({
       </label>
 
       {options.map((opt, i) => (
-        <div key={opt.id ?? `new-${i}`} className="flex flex-col gap-2">
-          <div className="flex gap-2">
-            <input
-              value={opt.label}
-              readOnly={locked}
-              onFocus={() => locked && blockedAction()}
-              onChange={(e) => patchOption(i, { label: e.target.value })}
-              className={`flex-1 rounded-md border border-moss px-3 py-2 text-sm text-ink outline-none focus:border-forest ${
-                locked ? "cursor-not-allowed bg-moss/40" : "bg-card"
-              }`}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                if (locked) return blockedAction();
-                if (options.length <= 2) {
-                  return setNotice("A poll needs at least 2 options.");
-                }
-                setNotice(null);
-                // A new option's unsaved picture would otherwise be left behind.
-                if (!opt.id) deletePending(opt.pendingPath);
-                setOptions(options.filter((_, idx) => idx !== i));
-              }}
-              aria-label={`Remove option ${i + 1}`}
-              className={`rounded-md border border-moss px-2 text-sm hover:bg-card ${
-                locked ? "text-muted/50" : "text-muted"
-              }`}
-            >
-              ✕
-            </button>
-          </div>
-          {imagesSupported && (
-            <OptionImageField
-              url={opt.imageUrl}
-              label={opt.label}
-              locked={locked}
-              lockedNote="Pictures are locked once votes exist, like the options."
-              onUpload={(file) => uploadPicture(i, file)}
-              onRemove={() => removePicture(i)}
-            />
-          )}
+        <div key={opt.id ?? `new-${i}`} className="flex gap-2">
+          <input
+            value={opt.label}
+            readOnly={locked}
+            onFocus={() => locked && blockedAction()}
+            onChange={(e) => {
+              const next = [...options];
+              next[i] = { ...next[i], label: e.target.value };
+              setOptions(next);
+            }}
+            className={`flex-1 rounded-md border border-moss px-3 py-2 text-sm text-ink outline-none focus:border-forest ${
+              locked ? "cursor-not-allowed bg-moss/40" : "bg-card"
+            }`}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (locked) return blockedAction();
+              if (options.length <= 2) {
+                return setNotice("A poll needs at least 2 options.");
+              }
+              setNotice(null);
+              setOptions(options.filter((_, idx) => idx !== i));
+            }}
+            aria-label={`Remove option ${i + 1}`}
+            className={`rounded-md border border-moss px-2 text-sm hover:bg-card ${
+              locked ? "text-muted/50" : "text-muted"
+            }`}
+          >
+            ✕
+          </button>
         </div>
       ))}
 
@@ -208,7 +184,7 @@ export default function PollEditor({
           onClick={() => {
             if (locked) return blockedAction();
             setNotice(null);
-            setOptions([...options, { label: "", imageUrl: null, pendingPath: null }]);
+            setOptions([...options, { label: "" }]);
           }}
           className={`rounded-md border border-moss px-3 py-1.5 text-sm hover:bg-card ${
             locked ? "text-forest/50" : "text-forest"
@@ -233,11 +209,6 @@ export default function PollEditor({
         </button>
       </div>
 
-      {imagesSupported && (
-        <p className="text-[11px] text-muted">
-          Picture changes on existing options apply right away; they don&apos;t wait for Save.
-        </p>
-      )}
       {notice && <p className="text-sm text-ink">{notice}</p>}
       {error && <p className="text-sm text-amber">{error}</p>}
     </div>

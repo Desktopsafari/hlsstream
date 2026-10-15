@@ -1,15 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { createPollWithOptions, parseNewOptions } from "@/lib/pollAdmin";
-import {
-  attachPendingImage,
-  IMAGES_SQL_HINT,
-  imagesSupported,
-  isPendingPath,
-  loadOptionImagePaths,
-  pollImageUrl,
-  removeFilesIfUnreferenced,
-} from "@/lib/pollImages";
+import { createPollWithOptions, parseNewOptions, parsePendingImage } from "@/lib/pollAdmin";
+import { imagesSupported, loadPollImagePaths, pollImageUrl } from "@/lib/pollImages";
 import { easternHour } from "@/lib/pollSchedule";
 
 export async function GET() {
@@ -31,23 +23,20 @@ export async function GET() {
     .select("poll_id, option_id, label, display_order, vote_count")
     .in("poll_id", pollIds.length > 0 ? pollIds : ["00000000-0000-0000-0000-000000000000"]);
 
-  // Pictures need supabase/poll_option_images.sql; until it's run there is no
-  // column to read and everything below simply has no pictures.
+  // The poll picture needs supabase/poll_question_image.sql; until it's run
+  // there is no column to read and every poll simply has no picture.
   const picturesAvailable = await imagesSupported(supabase);
-  const imagePaths = picturesAvailable ? await loadOptionImagePaths(supabase, pollIds) : null;
+  const imagePaths = picturesAvailable ? await loadPollImagePaths(supabase, pollIds) : null;
 
   const pollsWithResults = polls.map((poll) => ({
     ...poll,
+    image_url: pollImageUrl(imagePaths?.get(poll.id) ?? null),
     // The daily open always lands in the noon hour (Eastern). A poll that went
     // live at any other time was started by hand with "Open now".
     opened_early: poll.status !== "scheduled" && easternHour(poll.opens_at) !== 12,
     options: (results ?? [])
       .filter((r) => r.poll_id === poll.id)
-      .sort((a, b) => a.display_order - b.display_order)
-      .map((r) => {
-        const path = imagePaths?.get(r.option_id) ?? null;
-        return { ...r, image_url: pollImageUrl(path) };
-      }),
+      .sort((a, b) => a.display_order - b.display_order),
   }));
 
   return NextResponse.json({ polls: pollsWithResults, imagesSupported: picturesAvailable });
@@ -57,6 +46,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const question = body?.question;
   const options = parseNewOptions(body?.options);
+  const imagePath = parsePendingImage(body?.imagePath);
   const repeatDaily = body?.repeatDaily === true;
 
   if (typeof question !== "string" || question.trim().length === 0 || !options) {
@@ -64,6 +54,9 @@ export async function POST(request: Request) {
       { error: "Need a question and at least 2 non-empty options." },
       { status: 400 },
     );
+  }
+  if (imagePath === undefined) {
+    return NextResponse.json({ error: "That picture isn't a valid upload." }, { status: 400 });
   }
 
   const supabase = createServiceRoleClient();
@@ -82,7 +75,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const created = await createPollWithOptions(supabase, { question, options, repeatDaily });
+  const created = await createPollWithOptions(supabase, { question, options, repeatDaily, imagePath });
   if (!created.ok) {
     return NextResponse.json({ error: created.error }, { status: created.status });
   }
@@ -90,7 +83,7 @@ export async function POST(request: Request) {
   return NextResponse.json({ ok: true, pollId: created.pollId });
 }
 
-type OptionInput = { id?: string; label: string; imagePath?: string };
+type OptionInput = { id?: string; label: string };
 
 // Edit a queued or open poll.
 // - No votes yet: question and options can be changed freely.
@@ -98,9 +91,9 @@ type OptionInput = { id?: string; label: string; imagePath?: string };
 //   orphan or misattribute the existing votes, so that's refused with an
 //   explanation rather than silently allowed or silently ignored.
 // - Closed: read-only.
-// Pictures on existing options are changed through /api/admin/polls/image
-// (which applies the same lock); only a brand-new option can arrive here with
-// a picture, as a pending upload.
+// The poll's picture follows the question's rule -- editable while the poll is
+// queued or open (even with votes), never once it's closed -- and is changed
+// through /api/admin/polls/image rather than here.
 export async function PUT(request: Request) {
   const body = await request.json().catch(() => null);
   const pollId = body?.pollId;
@@ -152,10 +145,7 @@ export async function PUT(request: Request) {
       !Array.isArray(optionsInput) ||
       optionsInput.length < 2 ||
       optionsInput.some(
-        (o) =>
-          typeof o?.label !== "string" ||
-          o.label.trim().length === 0 ||
-          (o.imagePath != null && !isPendingPath(o.imagePath)),
+        (o) => typeof o?.label !== "string" || o.label.trim().length === 0,
       )
     ) {
       return NextResponse.json(
@@ -166,7 +156,6 @@ export async function PUT(request: Request) {
     options = optionsInput.map((o: OptionInput) => ({
       id: typeof o.id === "string" && o.id ? o.id : undefined,
       label: o.label.trim(),
-      imagePath: typeof o.imagePath === "string" ? o.imagePath : undefined,
     }));
   }
 
@@ -195,47 +184,29 @@ export async function PUT(request: Request) {
         { status: 400 },
       );
     }
-    if (options.some((o) => o.imagePath) && !(await imagesSupported(supabase))) {
-      return NextResponse.json({ error: IMAGES_SQL_HINT }, { status: 400 });
-    }
 
     const keptIds = new Set(options.filter((o) => o.id).map((o) => o.id));
     const removedIds = existing.filter((o) => !keptIds.has(o.id)).map((o) => o.id);
 
     if (removedIds.length > 0) {
-      // Remember the pictures first; the files go once the rows are gone and
-      // only if no other poll's option still uses them.
-      const paths = await loadOptionImagePaths(supabase, [pollId]);
       const { error } = await supabase.from("poll_options").delete().in("id", removedIds);
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
-      if (paths) await removeFilesIfUnreferenced(supabase, removedIds.map((id) => paths.get(id)));
     }
 
     for (let i = 0; i < options.length; i++) {
       const o = options[i];
-      if (o.id) {
-        const { error } = await supabase
-          .from("poll_options")
-          .update({ label: o.label, display_order: i })
-          .eq("id", o.id);
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-        continue;
-      }
-      const { data: created, error } = await supabase
-        .from("poll_options")
-        .insert({ poll_id: pollId, label: o.label, display_order: i })
-        .select("id")
-        .single();
-      if (error || !created) {
-        return NextResponse.json({ error: error?.message ?? "Failed to add the option." }, { status: 500 });
-      }
-      if (o.imagePath) {
-        const attached = await attachPendingImage(supabase, pollId, created.id, o.imagePath);
-        if (!attached.ok) {
-          return NextResponse.json({ error: attached.error }, { status: attached.status });
-        }
+      const result = o.id
+        ? await supabase
+            .from("poll_options")
+            .update({ label: o.label, display_order: i })
+            .eq("id", o.id)
+        : await supabase
+            .from("poll_options")
+            .insert({ poll_id: pollId, label: o.label, display_order: i });
+      if (result.error) {
+        return NextResponse.json({ error: result.error.message }, { status: 500 });
       }
     }
   }

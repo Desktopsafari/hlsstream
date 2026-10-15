@@ -10,37 +10,36 @@ type PollOption = {
   label: string;
   display_order: number;
   vote_count: number;
-  // Optional picture; absent/null for options without one (and for every
-  // option until supabase/poll_option_images.sql has been run).
-  image_url?: string | null;
 };
-
-// Square crop of an option's picture. If the file is missing or fails to load
-// it renders nothing, so the option falls back to looking like a plain one.
-function OptionPicture({ url, alt, className }: { url: string; alt: string; className: string }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) return null;
-  return (
-    <span
-      className={`relative shrink-0 overflow-hidden rounded-md border border-moss bg-moss/40 ${className}`}
-    >
-      <Image
-        src={url}
-        alt={alt}
-        fill
-        sizes="64px"
-        className="object-cover"
-        onError={() => setFailed(true)}
-      />
-    </span>
-  );
-}
 
 type Poll = {
   id: string;
   question: string;
   status: "scheduled" | "open" | "closed";
+  // Optional picture shown above the question; absent/null for polls without
+  // one (and for every poll until supabase/poll_question_image.sql is run).
+  image_url?: string | null;
 };
+
+// 16:9 crop at the card's full width, capped in height so it can't take over
+// the card on wide screens. If the file is missing or fails to load it renders
+// nothing, so the card falls back to looking like a poll without a picture.
+function QuestionPicture({ url, alt }: { url: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <div className="relative aspect-video max-h-64 w-full overflow-hidden rounded-lg border border-moss bg-moss/40">
+      <Image
+        src={url}
+        alt={alt}
+        fill
+        sizes="(min-width: 1024px) 720px, 100vw"
+        className="object-cover"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
 
 type PollResponse = {
   poll: Poll | null;
@@ -117,49 +116,30 @@ export default function PollCard() {
         </div>
       )}
 
+      {poll.image_url && <QuestionPicture key={poll.image_url} url={poll.image_url} alt={poll.question} />}
+
       <p className={isClosed ? "text-base font-semibold text-ink" : "text-sm font-medium text-ink"}>
         {poll.question}
       </p>
 
       {!showResults &&
-        options.map((opt) =>
-          opt.image_url ? (
-            // The picture sits inside the button, so the whole row is still
-            // the tap target. aria-label keeps the accessible name exactly the
-            // option's label (the picture's alt would otherwise be read too).
-            <button
-              key={opt.option_id}
-              onClick={() => vote(opt.option_id)}
-              disabled={submitting}
-              aria-label={opt.label}
-              className="flex items-center gap-3 rounded-md border border-moss bg-parchment px-3 py-2 text-left text-sm text-ink hover:border-forest disabled:opacity-50"
-            >
-              <OptionPicture
-                key={opt.image_url}
-                url={opt.image_url}
-                alt={opt.label}
-                className="h-14 w-14 sm:h-16 sm:w-16"
-              />
-              <span>{opt.label}</span>
-            </button>
-          ) : (
-            <button
-              key={opt.option_id}
-              onClick={() => vote(opt.option_id)}
-              disabled={submitting}
-              className="rounded-md border border-moss bg-parchment px-3 py-2 text-left text-sm text-ink hover:border-forest disabled:opacity-50"
-            >
-              {opt.label}
-            </button>
-          ),
-        )}
+        options.map((opt) => (
+          <button
+            key={opt.option_id}
+            onClick={() => vote(opt.option_id)}
+            disabled={submitting}
+            className="rounded-md border border-moss bg-parchment px-3 py-2 text-left text-sm text-ink hover:border-forest disabled:opacity-50"
+          >
+            {opt.label}
+          </button>
+        ))}
 
       {showResults &&
         options.map((opt) => {
           const pct = totalVotes > 0 ? Math.round((opt.vote_count / totalVotes) * 100) : 0;
           const isMine = opt.option_id === votedOptionId;
-          const body = (
-            <>
+          return (
+            <div key={opt.option_id} className="text-sm">
               <div className="flex justify-between">
                 <span className={isMine ? "font-semibold text-forest" : "text-ink"}>
                   {opt.label}
@@ -172,20 +152,6 @@ export default function PollCard() {
               <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-moss">
                 <div className="h-full bg-amber" style={{ width: `${pct}%` }} />
               </div>
-            </>
-          );
-          if (!opt.image_url) {
-            return (
-              <div key={opt.option_id} className="text-sm">
-                {body}
-              </div>
-            );
-          }
-          return (
-            <div key={opt.option_id} className="flex items-center gap-3">
-              {/* The label is right next to it, so the picture is decorative here. */}
-              <OptionPicture key={opt.image_url} url={opt.image_url} alt="" className="h-10 w-10" />
-              <div className="min-w-0 flex-1 text-sm">{body}</div>
             </div>
           );
         })}

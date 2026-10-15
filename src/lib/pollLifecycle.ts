@@ -67,26 +67,12 @@ export async function closePollAndFinish(
   return { state: "closed", repeatMessage };
 }
 
-// Options for a repeating poll's next copy, with their pictures when the
-// image_path column exists (and without it when it doesn't).
-async function optionsForCopy(supabase: Supabase, pollId: string) {
-  const withImages = await supabase
-    .from("poll_options")
-    .select("label, display_order, image_path")
-    .eq("poll_id", pollId)
-    .order("display_order", { ascending: true });
-  if (!withImages.error) {
-    return (withImages.data ?? []) as { label: string; display_order: number; image_path: string | null }[];
-  }
-  const plain = await supabase
-    .from("poll_options")
-    .select("label, display_order")
-    .eq("poll_id", pollId)
-    .order("display_order", { ascending: true });
-  return ((plain.data ?? []) as { label: string; display_order: number }[]).map((o) => ({
-    ...o,
-    image_path: null as string | null,
-  }));
+// The closed poll's picture path, or null if it has none or the image_path
+// column on polls doesn't exist yet.
+async function pollPictureForCopy(supabase: Supabase, pollId: string): Promise<string | null> {
+  const { data, error } = await supabase.from("polls").select("image_path").eq("id", pollId).maybeSingle();
+  if (error) return null;
+  return (data as { image_path: string | null } | null)?.image_path ?? null;
 }
 
 // Runs after a repeat_daily poll closes. Mirrors the same "only one poll
@@ -97,8 +83,8 @@ async function optionsForCopy(supabase: Supabase, pollId: string) {
 // The repeating poll is marked repeat_paused instead of silently losing its
 // flag, so the admin panel can explain what happened.
 //
-// The copy's options point at the same picture files as the original. That's
-// safe because a file is only deleted when no option references it any more
+// The copy points at the same question picture file as the original. That's
+// safe because a file is only deleted when no poll references it any more
 // (see removeFileIfUnreferenced in pollImages.ts).
 export async function continueRepeatingPoll(
   supabase: Supabase,
@@ -117,7 +103,13 @@ export async function continueRepeatingPoll(
     return " A different poll was already queued for the next cycle, so the repeat was paused.";
   }
 
-  const options = await optionsForCopy(supabase, closedPollId);
+  const { data: options } = await supabase
+    .from("poll_options")
+    .select("label, display_order")
+    .eq("poll_id", closedPollId)
+    .order("display_order", { ascending: true });
+
+  const imagePath = await pollPictureForCopy(supabase, closedPollId);
 
   const { data: nextPoll, error: insertError } = await supabase
     .from("polls")
@@ -125,6 +117,9 @@ export async function continueRepeatingPoll(
       question,
       status: "scheduled",
       repeat_daily: true,
+      // Only sent when there is one, so a poll without a picture inserts the
+      // same columns it always did.
+      ...(imagePath ? { image_path: imagePath } : {}),
       // Placeholder timestamps -- the open/close crons overwrite these
       // with the real timestamps when they actually flip the status.
       opens_at: new Date().toISOString(),
@@ -138,15 +133,11 @@ export async function continueRepeatingPoll(
     return " Failed to queue tomorrow's repeat -- check the logs.";
   }
 
-  const hasPictures = options.some((o) => o.image_path);
   const { error: optionsError } = await supabase.from("poll_options").insert(
-    options.map((o) => ({
+    (options ?? []).map((o) => ({
       poll_id: nextPoll.id,
       label: o.label,
       display_order: o.display_order,
-      // Only sent when there is one, so a poll without pictures inserts the
-      // same columns it always did.
-      ...(hasPictures ? { image_path: o.image_path } : {}),
     })),
   );
 

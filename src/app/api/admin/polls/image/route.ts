@@ -1,24 +1,24 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
-  clearOptionImage,
+  clearPollImage,
   deletePendingImage,
   IMAGES_SQL_HINT,
   imagesSupported,
   isPendingPath,
-  setOptionImage,
+  setPollImage,
   uploadPendingImage,
 } from "@/lib/pollImages";
 
-// Pictures on poll options. With an optionId the picture goes straight onto
-// that option (and is refused once the poll has votes, like the options
-// themselves). Without one it's a "pending" upload for a form whose poll or
-// option doesn't exist yet; the form passes the returned path back when it
-// saves.
+// The picture above a poll's question. With a pollId the picture goes straight
+// onto that poll (allowed whenever the question text could be edited: queued or
+// open, not closed). Without one it's a "pending" upload for the Set Next Poll
+// form, whose poll doesn't exist yet; the form passes the returned path back
+// when it saves.
 export async function POST(request: Request) {
   const formData = await request.formData().catch(() => null);
   const file = formData?.get("file");
-  const optionId = formData?.get("optionId");
+  const pollId = formData?.get("pollId");
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Need a file." }, { status: 400 });
@@ -30,8 +30,8 @@ export async function POST(request: Request) {
   }
 
   const result =
-    typeof optionId === "string" && optionId
-      ? await setOptionImage(supabase, optionId, file)
+    typeof pollId === "string" && pollId
+      ? await setPollImage(supabase, pollId, file)
       : await uploadPendingImage(supabase, file);
 
   if (!result.ok) {
@@ -42,12 +42,12 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   const params = new URL(request.url).searchParams;
-  const optionId = params.get("optionId");
+  const pollId = params.get("pollId");
   const path = params.get("path");
   const supabase = createServiceRoleClient();
 
-  if (optionId) {
-    const result = await clearOptionImage(supabase, optionId);
+  if (pollId) {
+    const result = await clearPollImage(supabase, pollId);
     if (!result.ok) {
       return NextResponse.json({ error: result.error, code: result.code }, { status: result.status });
     }
@@ -59,5 +59,5 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  return NextResponse.json({ error: "Need an optionId or a pending picture path." }, { status: 400 });
+  return NextResponse.json({ error: "Need a pollId or a pending picture path." }, { status: 400 });
 }

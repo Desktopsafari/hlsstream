@@ -2,20 +2,39 @@ import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { createPollWithOptions, parseNewOptions, parsePendingImage } from "@/lib/pollAdmin";
 import { imagesSupported, loadPollImagePaths, pollImageUrl } from "@/lib/pollImages";
-import { easternHour } from "@/lib/pollSchedule";
+import {
+  DAILY_COLUMNS,
+  DURATION_SQL_HINT,
+  isDailyColumns,
+  resolveDuration,
+  type DurationColumns,
+} from "@/lib/pollDuration";
+import { durationColumnsExist } from "@/lib/pollTiming";
+import { easternHour, getNextNoon, getPollEnd, isLongPoll } from "@/lib/pollSchedule";
 
 export async function GET() {
   const supabase = createServiceRoleClient();
 
-  const { data: polls, error } = await supabase
+  // ends_at / open_ended / duration_days exist once supabase/poll_duration.sql has been run.
+  const durationsAvailable = await durationColumnsExist(supabase);
+  const { data: pollRows, error } = await supabase
     .from("polls")
-    .select("id, question, status, opens_at, closes_at, created_at, repeat_daily, repeat_paused")
+    .select(
+      `id, question, status, opens_at, closes_at, created_at, repeat_daily, repeat_paused${
+        durationsAvailable ? ", ends_at, open_ended, duration_days" : ""
+      }`,
+    )
     .order("created_at", { ascending: false })
     .limit(20);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  const polls = pollRows as unknown as {
+    id: string; question: string; status: string; opens_at: string; closes_at: string; created_at: string;
+    repeat_daily: boolean; repeat_paused: boolean;
+    ends_at?: string | null; open_ended?: boolean | null; duration_days?: number | null;
+  }[];
 
   const pollIds = polls.map((p) => p.id);
   const { data: results } = await supabase
@@ -30,6 +49,13 @@ export async function GET() {
 
   const pollsWithResults = polls.map((poll) => ({
     ...poll,
+    ends_at: poll.ends_at ?? null,
+    open_ended: !!poll.open_ended,
+    duration_days: poll.duration_days ?? null,
+    // When voting ends for an open poll: its end instant, or null for no end.
+    voting_end:
+      poll.status === "open" ? (getPollEnd(poll)?.toISOString() ?? null) : null,
+    is_long: isLongPoll(poll),
     image_url: pollImageUrl(imagePaths?.get(poll.id) ?? null),
     // The daily open always lands in the noon hour (Eastern). A poll that went
     // live at any other time was started by hand with "Open now".
@@ -39,7 +65,11 @@ export async function GET() {
       .sort((a, b) => a.display_order - b.display_order),
   }));
 
-  return NextResponse.json({ polls: pollsWithResults, imagesSupported: picturesAvailable });
+  return NextResponse.json({
+    polls: pollsWithResults,
+    imagesSupported: picturesAvailable,
+    durationsSupported: durationsAvailable,
+  });
 }
 
 export async function POST(request: Request) {
@@ -59,6 +89,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "That picture isn't a valid upload." }, { status: 400 });
   }
 
+  // How long voting runs. Omitted = the normal daily poll, exactly as before.
+  const now = new Date();
+  const resolved = resolveDuration(body?.duration, getNextNoon(now), now);
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.error }, { status: 400 });
+  }
+  if (repeatDaily && !isDailyColumns(resolved.columns)) {
+    return NextResponse.json(
+      { error: "A multi-day or open-ended poll can't repeat daily. Turn off Repeat daily or choose Today only." },
+      { status: 400 },
+    );
+  }
+
   const supabase = createServiceRoleClient();
 
   const { data: existingScheduled } = await supabase
@@ -75,7 +118,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const created = await createPollWithOptions(supabase, { question, options, repeatDaily, imagePath });
+  const created = await createPollWithOptions(supabase, {
+    question,
+    options,
+    repeatDaily,
+    imagePath,
+    duration: resolved.columns,
+  });
   if (!created.ok) {
     return NextResponse.json({ error: created.error }, { status: created.status });
   }
@@ -123,6 +172,48 @@ export async function PUT(request: Request) {
     return NextResponse.json(
       { error: "This poll is closed, so it can't be edited anymore." },
       { status: 409 },
+    );
+  }
+
+  // How long voting runs. Only a queued poll's duration is edited here; an
+  // open poll's end is changed with "Change end time" (/polls/end-time), which
+  // also refuses to move it into the past.
+  const durationsAvailable = await durationColumnsExist(supabase);
+  let currentDuration: DurationColumns = DAILY_COLUMNS;
+  if (durationsAvailable) {
+    const { data: d } = await supabase
+      .from("polls")
+      .select("ends_at, open_ended, duration_days")
+      .eq("id", pollId)
+      .maybeSingle();
+    const row = d as { ends_at: string | null; open_ended: boolean | null; duration_days: number | null } | null;
+    if (row) {
+      currentDuration = { ends_at: row.ends_at, open_ended: !!row.open_ended, duration_days: row.duration_days };
+    }
+  }
+  let newDuration: DurationColumns | null = null;
+  if (body?.duration !== undefined) {
+    if (poll.status !== "scheduled") {
+      return NextResponse.json(
+        { error: "A poll that is already open can't have its duration changed here. Use Change end time." },
+        { status: 409 },
+      );
+    }
+    const now = new Date();
+    const resolved = resolveDuration(body.duration, getNextNoon(now), now);
+    if (!resolved.ok) {
+      return NextResponse.json({ error: resolved.error }, { status: 400 });
+    }
+    if (!isDailyColumns(resolved.columns) && !durationsAvailable) {
+      return NextResponse.json({ error: DURATION_SQL_HINT }, { status: 400 });
+    }
+    newDuration = resolved.columns;
+  }
+  const finalRepeat = typeof repeatDailyInput === "boolean" ? repeatDailyInput : poll.repeat_daily;
+  if (finalRepeat && !isDailyColumns(newDuration ?? currentDuration)) {
+    return NextResponse.json(
+      { error: "A multi-day or open-ended poll can't repeat daily. Turn off Repeat daily or choose Today only." },
+      { status: 400 },
     );
   }
 
@@ -214,12 +305,16 @@ export async function PUT(request: Request) {
   // The repeat-daily flag never touches votes or options, so it's editable
   // regardless of the options lock above -- turning it off just means this
   // poll's current cycle finishes normally without spawning a continuation.
-  const pollUpdates: { question?: string; repeat_daily?: boolean } = {};
+  const pollUpdates: { question?: string; repeat_daily?: boolean } & Partial<DurationColumns> = {};
   if (question.trim() !== poll.question) {
     pollUpdates.question = question.trim();
   }
   if (typeof repeatDailyInput === "boolean" && repeatDailyInput !== poll.repeat_daily) {
     pollUpdates.repeat_daily = repeatDailyInput;
+  }
+
+  if (newDuration && durationsAvailable) {
+    Object.assign(pollUpdates, newDuration);
   }
 
   if (Object.keys(pollUpdates).length > 0) {

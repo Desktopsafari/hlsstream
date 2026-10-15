@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { POLL_REFRESH_INTERVAL_MS } from "@/config/constants";
+import { publicDeadline } from "@/lib/pollDuration";
 import { getSessionId } from "@/lib/session";
 
 type PollOption = {
@@ -19,6 +20,11 @@ type Poll = {
   // Optional picture shown above the question; absent/null for polls without
   // one (and for every poll until supabase/poll_question_image.sql is run).
   image_url?: string | null;
+  // Only set on a poll with a chosen duration (multi-day, specific end time,
+  // open-ended). A normal daily poll leaves both empty and the card is exactly
+  // as it always was.
+  ends_at?: string | null;
+  open_ended?: boolean | null;
 };
 
 // 16:9 crop at the card's full width, capped in height so it can't take over
@@ -102,6 +108,7 @@ export default function PollCard() {
   const showResults = poll.status === "closed" || hasVoted;
 
   const isClosed = poll.status === "closed";
+  const deadline = poll.status === "open" ? publicDeadline(poll) : null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -121,6 +128,8 @@ export default function PollCard() {
       <p className={isClosed ? "text-base font-semibold text-ink" : "text-sm font-medium text-ink"}>
         {poll.question}
       </p>
+
+      {deadline && <p className="text-xs text-muted">{deadline}</p>}
 
       {!showResults &&
         options.map((opt) => (

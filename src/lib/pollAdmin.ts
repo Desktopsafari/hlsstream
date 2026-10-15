@@ -1,4 +1,6 @@
 import type { createServiceRoleClient } from "@/lib/supabase/server";
+import { DURATION_SQL_HINT, isDailyColumns, type DurationColumns } from "@/lib/pollDuration";
+import { durationColumnsExist } from "@/lib/pollTiming";
 import {
   attachPendingImage,
   IMAGES_SQL_HINT,
@@ -37,10 +39,21 @@ export type CreatePollResult =
 // half-made: if any step fails the poll is removed again.
 export async function createPollWithOptions(
   supabase: Supabase,
-  input: { question: string; options: string[]; repeatDaily: boolean; imagePath?: string | null },
+  input: {
+    question: string;
+    options: string[];
+    repeatDaily: boolean;
+    imagePath?: string | null;
+    duration?: DurationColumns;
+  },
 ): Promise<CreatePollResult> {
   if (input.imagePath && !(await imagesSupported(supabase))) {
     return { ok: false, status: 400, error: IMAGES_SQL_HINT };
+  }
+  // A chosen duration needs its columns; the normal daily poll never does.
+  const longDuration = input.duration && !isDailyColumns(input.duration) ? input.duration : null;
+  if (longDuration && !(await durationColumnsExist(supabase))) {
+    return { ok: false, status: 400, error: DURATION_SQL_HINT };
   }
 
   const { data: poll, error: pollError } = await supabase
@@ -49,6 +62,7 @@ export async function createPollWithOptions(
       question: input.question.trim(),
       status: "scheduled",
       repeat_daily: input.repeatDaily,
+      ...(longDuration ?? {}),
       // Placeholder timestamps -- the open/close crons overwrite these
       // with the real timestamps when they actually flip the status.
       opens_at: new Date().toISOString(),

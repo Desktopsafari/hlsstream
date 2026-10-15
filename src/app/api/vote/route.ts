@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { isPollPastCutoff } from "@/lib/pollSchedule";
+import { isPollPastEnd, type PollTiming } from "@/lib/pollSchedule";
+import { timingSelect } from "@/lib/pollTiming";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -19,19 +20,22 @@ export async function POST(request: Request) {
 
   const supabase = createServiceRoleClient();
 
-  const { data: poll } = await supabase
+  // ends_at / open_ended exist once supabase/poll_duration.sql has been run.
+  const { data: pollRow } = await supabase
     .from("polls")
-    .select("id, status, opens_at")
+    .select(`id, status, opens_at${await timingSelect(supabase)}`)
     .eq("id", pollId)
     .maybeSingle();
+  const poll = pollRow as unknown as ({ id: string; status: string } & PollTiming) | null;
 
   if (!poll || poll.status !== "open") {
     return NextResponse.json({ error: "This poll isn't open for voting." }, { status: 400 });
   }
 
-  // The cron that flips status to "closed" can run up to ~an hour late, so
-  // the real cutoff is enforced here.
-  if (isPollPastCutoff(poll.opens_at)) {
+  // The crons that flip status to "closed" run once a day, imprecisely, so
+  // the real end time is enforced here on every vote: the normal 8pm cutoff,
+  // a chosen end time, or never for an open-ended poll.
+  if (isPollPastEnd(poll)) {
     return NextResponse.json({ error: "Voting has closed for this poll." }, { status: 400 });
   }
 

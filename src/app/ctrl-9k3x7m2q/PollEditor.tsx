@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import PollImageField from "./PollImageField";
+import DurationField, { durationValueFromPoll, toDurationInput } from "./DurationField";
 
 type PollOptionResult = {
   option_id: string;
@@ -18,6 +19,10 @@ type EditablePoll = {
   repeat_daily: boolean;
   repeat_paused: boolean;
   image_url: string | null;
+  ends_at: string | null;
+  open_ended: boolean;
+  duration_days: number | null;
+  is_long: boolean;
 };
 
 type EditOption = { id?: string; label: string };
@@ -25,11 +30,13 @@ type EditOption = { id?: string; label: string };
 export default function PollEditor({
   poll,
   imagesSupported,
+  durationsSupported,
   onSaved,
   onCancel,
 }: {
   poll: EditablePoll;
   imagesSupported: boolean;
+  durationsSupported: boolean;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -47,6 +54,11 @@ export default function PollEditor({
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [imageUrl, setImageUrl] = useState(poll.image_url);
+  // How long voting runs can be changed on a queued poll. An open poll's end is
+  // changed with Change end time in Poll History instead.
+  const [duration, setDuration] = useState(() => durationValueFromPoll(poll));
+  const canEditDuration = durationsSupported && poll.status === "scheduled";
+  const longPoll = canEditDuration ? duration.mode !== "today" : poll.is_long;
 
   // The picture follows the question text's rule: editable here (queued or
   // open) even when votes exist, and it applies right away rather than on Save.
@@ -91,6 +103,7 @@ export default function PollEditor({
         question,
         options: options.map((o) => ({ id: o.id, label: o.label })),
         repeatDaily,
+        ...(canEditDuration ? { duration: toDurationInput(duration) } : {}),
       }),
     });
 
@@ -133,10 +146,21 @@ export default function PollEditor({
         </p>
       )}
 
+      {canEditDuration && (
+        <DurationField value={duration} onChange={setDuration} repeatDaily={repeatDaily} supported />
+      )}
+      {poll.status === "open" && poll.is_long && (
+        <p className="text-[11px] text-muted">
+          This poll has a chosen end time (or none). Change it with Change end time, or end it with
+          Close now, in Poll History.
+        </p>
+      )}
+
       <label className="flex items-center gap-2 text-sm text-ink">
         <input
           type="checkbox"
           checked={repeatDaily}
+          disabled={longPoll}
           onChange={(e) => setRepeatDaily(e.target.checked)}
           className="h-4 w-4 rounded border-moss"
         />

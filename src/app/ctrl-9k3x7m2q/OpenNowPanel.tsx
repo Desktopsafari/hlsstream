@@ -6,12 +6,15 @@ type Info = {
   allowed: boolean;
   cutoff: string;
   message: string;
+  long: boolean;
+  emailNote: string | null;
   openPoll: {
     id: string;
     question: string;
     votes: number;
     repeatDaily: boolean;
-    repeatOutcome: "none" | "queue_copy" | "pause";
+    repeatOutcome: "none" | "queue_copy" | "pause" | "pause_for_long";
+    ends: string;
   } | null;
   staleCount: number;
   queued: { id: string; question: string } | null;
@@ -29,7 +32,13 @@ export default function OpenNowPanel({
   onQueueInstead,
 }: {
   pollId?: string;
-  newPoll?: { question: string; options: string[]; repeatDaily: boolean; imagePath: string | null };
+  newPoll?: {
+    question: string;
+    options: string[];
+    repeatDaily: boolean;
+    imagePath: string | null;
+    duration: unknown;
+  };
   onOpened: (message: string) => void;
   onCancel: () => void;
   // Form only: queue the poll for tomorrow's noon instead (shown after 8pm).
@@ -42,7 +51,12 @@ export default function OpenNowPanel({
 
   async function load() {
     setLoadError(null);
-    const res = await fetch(`/api/admin/polls/open-now${pollId ? `?pollId=${pollId}` : ""}`);
+    const query = pollId
+      ? `?pollId=${pollId}`
+      : newPoll
+        ? `?duration=${encodeURIComponent(JSON.stringify(newPoll.duration))}`
+        : "";
+    const res = await fetch(`/api/admin/polls/open-now${query}`);
     if (!res.ok) {
       setLoadError("Couldn't check the poll status. Try again.");
       return;
@@ -98,11 +112,12 @@ export default function OpenNowPanel({
       {info && !info.allowed && (
         <>
           <p className="font-semibold">{info.message}</p>
-          {onQueueInstead ? (
-            <p>You can queue it for tomorrow&apos;s noon instead.</p>
-          ) : (
-            <p>It stays queued and opens at tomorrow&apos;s noon.</p>
-          )}
+          {!info.long &&
+            (onQueueInstead ? (
+              <p>You can queue it for tomorrow&apos;s noon instead.</p>
+            ) : (
+              <p>It stays queued and opens at tomorrow&apos;s noon.</p>
+            ))}
         </>
       )}
 
@@ -114,7 +129,7 @@ export default function OpenNowPanel({
             <div className="rounded-md border border-amber bg-card p-2">
               <p className="font-semibold text-amber">
                 A poll is already open: &ldquo;{info.openPoll.question}&rdquo; (
-                {info.openPoll.votes} vote{info.openPoll.votes === 1 ? "" : "s"}).
+                {info.openPoll.votes} vote{info.openPoll.votes === 1 ? "" : "s"}; {info.openPoll.ends}).
               </p>
               <p className="mt-1">Opening this one will:</p>
               <ul className="ml-5 list-disc text-muted">
@@ -123,12 +138,18 @@ export default function OpenNowPanel({
                   {info.openPoll.votes === 1 ? " is" : "s are"} kept and its results stay in the history.
                 </li>
                 <li>
-                  email its results once, now. It won&apos;t be emailed again at {info.cutoff}.
+                  email its results once, now. It won&apos;t be emailed again later.
                 </li>
                 {info.openPoll.repeatOutcome === "queue_copy" && (
                   <li>
                     queue tomorrow&apos;s copy of it (it repeats daily), the same as it would at{" "}
                     {info.cutoff}.
+                  </li>
+                )}
+                {info.openPoll.repeatOutcome === "pause_for_long" && (
+                  <li>
+                    pause its daily repeat while this longer poll runs; it goes back in the queue when
+                    this poll closes.
                   </li>
                 )}
                 {info.openPoll.repeatOutcome === "pause" && (
@@ -141,13 +162,20 @@ export default function OpenNowPanel({
             </div>
           )}
 
+          {info.emailNote && <p className="text-[11px] text-muted">{info.emailNote}</p>}
+          {info.long && info.queued && !info.openPoll && (
+            <p className="text-muted">
+              &ldquo;{info.queued.question}&rdquo; stays queued and waits until this poll has closed.
+            </p>
+          )}
+
           {info.staleCount > 0 && (
             <p className="text-muted">
               {info.staleCount} earlier poll{info.staleCount === 1 ? " is" : "s are"} past {info.cutoff} but
               not closed yet; they&apos;ll be closed and their results emailed as well.
             </p>
           )}
-          {info.queued && !info.openPoll && (
+          {!info.long && info.queued && !info.openPoll && (
             <p className="text-muted">
               &ldquo;{info.queued.question}&rdquo; is queued separately and still opens at
               tomorrow&apos;s noon.

@@ -6,6 +6,9 @@ import Image from "next/image";
 import PollEditor from "./PollEditor";
 import OpenNowPanel from "./OpenNowPanel";
 import PollImageField from "./PollImageField";
+import DurationField, { DEFAULT_DURATION, toDurationInput, type DurationValue } from "./DurationField";
+import OpenPollControls from "./OpenPollControls";
+import { formatEasternDate } from "@/lib/pollSchedule";
 import SpeciesAdmin from "./SpeciesAdmin";
 import SuggestionEventAdmin from "./SuggestionEventAdmin";
 import NotificationCategoriesAdmin from "./NotificationCategoriesAdmin";
@@ -31,7 +34,21 @@ type Poll = {
   repeat_paused: boolean;
   opened_early: boolean;
   image_url: string | null;
+  // How long voting runs (all empty on a normal daily poll).
+  ends_at: string | null;
+  open_ended: boolean;
+  duration_days: number | null;
+  voting_end: string | null; // for an open poll: when voting ends, null = no end
+  is_long: boolean;
 };
+
+// "Today only" / "3 days from when it opens" / "until Sun, Oct 18, 8:00 PM ET" / "until closed".
+function describeDuration(p: Poll): string {
+  if (p.open_ended) return "until you close it (no end)";
+  if (p.duration_days) return `${p.duration_days} days from when it opens (ends 8:00 PM ET on the last day)`;
+  if (p.ends_at) return `until ${formatEasternDate(new Date(p.ends_at))} ET`;
+  return "today only (ends 8:00 PM ET)";
+}
 
 function formatEastern(iso: string): string {
   return new Date(iso).toLocaleString("en-US", {
@@ -61,8 +78,11 @@ export default function AdminDashboard() {
   // "pending" file (imagePath) until the poll is saved.
   const [image, setImage] = useState<{ path: string; url: string | null } | null>(null);
   const [repeatDaily, setRepeatDaily] = useState(false);
+  const [duration, setDuration] = useState<DurationValue>(DEFAULT_DURATION);
+  const [durationsSupported, setDurationsSupported] = useState(false);
   const [pollError, setPollError] = useState<string | null>(null);
   const [pollNotice, setPollNotice] = useState<string | null>(null);
+  const [historyNotice, setHistoryNotice] = useState<string | null>(null);
   const [pollSubmitting, setPollSubmitting] = useState(false);
   const [imagesSupported, setImagesSupported] = useState(false);
   // Which Open now confirmation is showing: the form's, or a queued poll's.
@@ -80,6 +100,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       setPolls(data.polls);
       setImagesSupported(data.imagesSupported === true);
+      setDurationsSupported(data.durationsSupported === true);
     }
   }
 
@@ -108,6 +129,7 @@ export default function AdminDashboard() {
     setOptions(["", ""]);
     setImage(null);
     setRepeatDaily(false);
+    setDuration(DEFAULT_DURATION);
   }
 
   async function queuePoll() {
@@ -119,7 +141,13 @@ export default function AdminDashboard() {
     const res = await fetch("/api/admin/polls", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, options: filledOptions, repeatDaily, imagePath: image?.path ?? null }),
+      body: JSON.stringify({
+        question,
+        options: filledOptions,
+        repeatDaily,
+        imagePath: image?.path ?? null,
+        duration: toDurationInput(duration),
+      }),
     });
 
     setPollSubmitting(false);
@@ -144,6 +172,10 @@ export default function AdminDashboard() {
     setPollNotice(null);
     if (question.trim().length === 0 || filledOptions.length < 2) {
       setPollError("Need a question and at least 2 non-empty options.");
+      return;
+    }
+    if (duration.mode === "until" && !duration.until) {
+      setPollError("Pick the end date and time for voting.");
       return;
     }
     setOpenNowFor({ kind: "form" });
@@ -249,15 +281,28 @@ export default function AdminDashboard() {
               className="rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
             />
           ))}
+          <DurationField
+            value={duration}
+            onChange={setDuration}
+            repeatDaily={repeatDaily}
+            supported={durationsSupported}
+          />
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
               type="checkbox"
               checked={repeatDaily}
+              disabled={duration.mode !== "today"}
               onChange={(e) => setRepeatDaily(e.target.checked)}
               className="h-4 w-4 rounded border-moss"
             />
-            Repeat this poll daily
+            <span className={duration.mode !== "today" ? "text-muted" : undefined}>Repeat this poll daily</span>
           </label>
+          {duration.mode !== "today" && (
+            <p className="-mt-2 text-[11px] text-muted">
+              Not available for a multi-day or open-ended poll. Choose &ldquo;Today only&rdquo; above to
+              repeat daily.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -283,12 +328,19 @@ export default function AdminDashboard() {
             </button>
           </div>
           <p className="text-[11px] text-muted">
-            Queue poll opens it at the next noon. Open now makes it live immediately; voting still
-            ends at 8:00 PM ET.
+            {duration.mode === "today"
+              ? "Queue poll opens it at the next noon. Open now makes it live immediately; voting still ends at 8:00 PM ET."
+              : "Queue poll opens it at the next noon. Open now makes it live immediately."}
           </p>
           {openNowFor?.kind === "form" && (
             <OpenNowPanel
-              newPoll={{ question, options: filledOptions, repeatDaily, imagePath: image?.path ?? null }}
+              newPoll={{
+                question,
+                options: filledOptions,
+                repeatDaily,
+                imagePath: image?.path ?? null,
+                duration: toDurationInput(duration),
+              }}
               onCancel={() => setOpenNowFor(null)}
               onQueueInstead={queuePoll}
               onOpened={(message) => {
@@ -307,6 +359,7 @@ export default function AdminDashboard() {
       {/* Poll history */}
       <section className="rounded-xl border border-moss bg-card p-5 shadow-sm">
         <h2 className="mb-3 font-heading text-lg font-semibold text-forest">Poll History</h2>
+        {historyNotice && <p className="mb-3 text-sm text-forest">{historyNotice}</p>}
         <div className="flex flex-col gap-4">
           {polls.length === 0 && <p className="text-sm text-muted">No polls yet.</p>}
           {polls.map((poll) =>
@@ -315,6 +368,7 @@ export default function AdminDashboard() {
                 key={poll.id}
                 poll={poll}
                 imagesSupported={imagesSupported}
+                durationsSupported={durationsSupported}
                 onCancel={() => {
                   setEditingPollId(null);
                   loadPolls();
@@ -369,6 +423,19 @@ export default function AdminDashboard() {
                   <p className="mt-1 text-xs text-amber">
                     ⚡ Opened early with Open now at {formatEastern(poll.opens_at)} ET
                   </p>
+                )}
+                {poll.status !== "closed" && (poll.is_long || poll.duration_days) && (
+                  <p className="mt-1 text-xs font-semibold text-forest">⏱ Voting runs {describeDuration(poll)}</p>
+                )}
+                {poll.status === "open" && (
+                  <OpenPollControls
+                    poll={poll}
+                    durationsSupported={durationsSupported}
+                    onChanged={(message) => {
+                      setHistoryNotice(message);
+                      loadPolls();
+                    }}
+                  />
                 )}
                 {openNowFor?.kind === "poll" && openNowFor.pollId === poll.id && (
                   <div className="mt-2">

@@ -61,6 +61,99 @@ export function isPollPastCutoff(opensAt: string | Date, now: Date = new Date())
   return now.getTime() >= getPollCutoff(opensAt).getTime();
 }
 
+// ---------------------------------------------------------------------------
+// Poll end times. A normal daily poll ends at the first 8 PM ET after it
+// opened (getPollCutoff). A poll with a chosen duration stores its own end
+// instant (ends_at) or is open-ended (never expires by time). Voting is
+// decided from these on every vote request, so it stops on time even when the
+// close cron hasn't run yet.
+// ---------------------------------------------------------------------------
+
+export type PollTiming = {
+  opens_at: string;
+  ends_at?: string | null;
+  open_ended?: boolean | null;
+};
+
+// When voting ends, or null for an open-ended poll.
+export function getPollEnd(poll: PollTiming): Date | null {
+  if (poll.open_ended) return null;
+  if (poll.ends_at) return new Date(poll.ends_at);
+  return getPollCutoff(poll.opens_at);
+}
+
+export function isPollPastEnd(poll: PollTiming, now: Date = new Date()): boolean {
+  const end = getPollEnd(poll);
+  return end !== null && now.getTime() >= end.getTime();
+}
+
+// A poll with a chosen duration (as opposed to the normal daily one).
+export function isLongPoll(poll: { ends_at?: string | null; open_ended?: boolean | null }): boolean {
+  return !!poll.open_ended || !!poll.ends_at;
+}
+
+// 8 PM ET on the last day of an N-day poll that opened at `opensAt`
+// (day 1 is the day it opened). Correct across a DST changeover.
+export function getDaysPollEnd(opensAt: string | Date, days: number): Date {
+  const p = zonedParts(new Date(opensAt));
+  const last = new Date(Date.UTC(p.y, p.m - 1, p.d + days - 1));
+  return zonedWallTimeToDate(
+    last.getUTCFullYear(),
+    last.getUTCMonth() + 1,
+    last.getUTCDate(),
+    POLL_CLOSE_HOUR,
+  );
+}
+
+// The next 12:00 PM ET after `now`: when a newly queued poll opens.
+export function getNextNoon(now: Date = new Date()): Date {
+  const p = zonedParts(now);
+  const today = zonedWallTimeToDate(p.y, p.m, p.d, 12);
+  if (today.getTime() > now.getTime()) return today;
+  const next = new Date(Date.UTC(p.y, p.m - 1, p.d + 1));
+  return zonedWallTimeToDate(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), 12);
+}
+
+// "Sunday 8:00 PM", "Fri 12:00 PM" ... in POLL_TIMEZONE (no "ET" suffix).
+export function formatEasternDay(date: Date, weekday: "long" | "short" = "long"): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: POLL_TIMEZONE,
+    weekday,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("weekday")} ${get("hour")}:${get("minute")} ${get("dayPeriod").toUpperCase()}`;
+}
+
+// "Sun, Nov 15, 8:00 PM" -- used when the date matters more than the weekday.
+export function formatEasternDate(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: POLL_TIMEZONE,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("weekday")}, ${get("month")} ${get("day")}, ${get("hour")}:${get("minute")} ${get("dayPeriod").toUpperCase()}`;
+}
+
+// Public wording: "Sunday 8:00 PM" within a week, otherwise with the date.
+export function formatDeadline(end: Date, now: Date = new Date()): string {
+  const withinWeek = end.getTime() - now.getTime() < 6 * 24 * 60 * 60 * 1000;
+  return withinWeek ? formatEasternDay(end, "long") : formatEasternDate(end);
+}
+
+// Whether a moment is exactly the normal cutoff hour (8:00 PM ET).
+export function isAtCutoffHour(date: Date): boolean {
+  const p = zonedParts(date);
+  return p.h === POLL_CLOSE_HOUR && p.min === 0;
+}
+
 // What "Open now" may do right now. Before the cutoff hour it's allowed and
 // voting would run until today's cutoff; from the cutoff hour on it isn't,
 // because getPollCutoff would then point at tomorrow and the poll would sit

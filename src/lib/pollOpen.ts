@@ -1,6 +1,5 @@
 import type { createServiceRoleClient } from "@/lib/supabase/server";
-import { POLL_CLOSE_HOUR } from "@/config/constants";
-import { sendPollResultsEmail } from "@/lib/email";
+import { closePollAndFinish, type LifecycleDeps } from "@/lib/pollClose";
 import {
   approxSpan,
   DAILY_COLUMNS,
@@ -10,22 +9,16 @@ import {
   type DurationColumns,
 } from "@/lib/pollDuration";
 import {
+  cutoffLabel,
   formatDuration,
   formatEasternDay,
   getDaysPollEnd,
   getOpenNowWindow,
   getPollState,
-  isLongPoll,
-  type PollTiming,
 } from "@/lib/pollSchedule";
 import { loadPollDuration, timingSelect } from "@/lib/pollTiming";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
-
-// Injectable so tests can count emails instead of sending them.
-export type LifecycleDeps = {
-  sendResultsEmail?: (question: string, options: { label: string; vote_count: number }[]) => Promise<void>;
-};
 
 type OpenPollRow = {
   id: string;
@@ -41,229 +34,6 @@ type OpenPollRow = {
 // simultaneous Open now (a double-click, or two admin tabs) rather than the
 // poll being replaced.
 const SIMULTANEOUS_MS = 10_000;
-
-// A paused daily poll closed within this long after a long poll opened (or any
-// time before it) is the one that was waiting on it.
-const RESUME_WINDOW_MS = 60_000;
-
-export function cutoffLabel(): string {
-  const hour12 = POLL_CLOSE_HOUR % 12 === 0 ? 12 : POLL_CLOSE_HOUR % 12;
-  return `${hour12}:00 ${POLL_CLOSE_HOUR >= 12 ? "PM" : "AM"} ET`;
-}
-
-// ---------------------------------------------------------------------------
-// Closing a poll (the 8pm / noon crons, Close now, and Open now replacing one)
-// ---------------------------------------------------------------------------
-
-export type CloseOutcome =
-  | { state: "closed"; repeatMessage: string }
-  | { state: "already_closed" }
-  | { state: "error"; error: string };
-
-// Flips an open poll to closed, emails its results, and carries a repeating
-// poll forward. The status flip is conditional on the poll still being open,
-// so whichever caller flips it (a cron, Close now, an admin replacing it) is
-// the only one that sends the results email or queues the next copy -- the
-// other gets "already_closed" and does nothing. Results can't be sent twice.
-//
-// repeatMode "pause" is used when a long poll takes over: a repeating poll
-// that is replaced is marked paused instead of queueing its next copy, and it
-// resumes when the long poll closes. Closing a long poll resumes a daily poll
-// that was waiting on it (resumePausedRepeatingPoll).
-export async function closePollAndFinish(
-  supabase: Supabase,
-  poll: { id: string; question: string; repeat_daily: boolean },
-  deps: LifecycleDeps = {},
-  opts: { repeatMode?: "normal" | "pause" } = {},
-): Promise<CloseOutcome> {
-  const { data: flipped, error } = await supabase
-    .from("polls")
-    .update({ status: "closed", closes_at: new Date().toISOString() })
-    .eq("id", poll.id)
-    .eq("status", "open")
-    .select("id");
-
-  if (error) {
-    console.error("Failed to close poll:", error.message);
-    return { state: "error", error: error.message };
-  }
-  if (!flipped || flipped.length === 0) return { state: "already_closed" };
-
-  const { data: results } = await supabase
-    .from("poll_results")
-    .select("label, vote_count")
-    .eq("poll_id", poll.id);
-
-  await (deps.sendResultsEmail ?? sendPollResultsEmail)(poll.question, results ?? []);
-
-  let repeatMessage = "";
-  if (poll.repeat_daily) {
-    if (opts.repeatMode === "pause") {
-      await supabase.from("polls").update({ repeat_paused: true }).eq("id", poll.id);
-      repeatMessage = " Its daily repeat is paused and resumes when the long poll closes.";
-    } else {
-      repeatMessage = await continueRepeatingPoll(supabase, poll.id, poll.question);
-    }
-  }
-
-  const { cols, opens_at } = await loadPollDuration(supabase, poll.id);
-  if (!isDailyColumns(cols) && opens_at) {
-    repeatMessage += await resumePausedRepeatingPoll(supabase, poll.id, opens_at);
-  }
-  return { state: "closed", repeatMessage };
-}
-
-// Which open polls each daily job may close. The 8 PM job closes a normal poll
-// whenever it runs (as it always has) and a long poll only once its end time has
-// passed; the noon job only ever closes long polls that have ended -- a normal
-// poll is left to the 8 PM job.
-export type CronJob = "evening" | "noon";
-
-export function isDueForJob(
-  poll: { status: string } & PollTiming,
-  job: CronJob,
-  now: Date = new Date(),
-): boolean {
-  const long = isLongPoll(poll);
-  const ended = getPollState(poll, now).phase === "ended";
-  return job === "evening" ? !long || ended : long && ended;
-}
-
-// Closes (and emails, once each) every open poll the job is due to close, and
-// returns the text the job adds to its response.
-export async function closeDuePolls(
-  supabase: Supabase,
-  polls: ({ id: string; question: string; repeat_daily: boolean; status: string } & PollTiming)[],
-  job: CronJob,
-  deps: LifecycleDeps = {},
-): Promise<string> {
-  let message = "";
-  for (const p of polls) {
-    if (!isDueForJob(p, job)) continue;
-    const outcome = await closePollAndFinish(supabase, p, deps);
-    if (outcome.state === "closed") {
-      message += ` Closed the ended poll "${p.question}" and emailed its results.${outcome.repeatMessage}`;
-    }
-  }
-  return message;
-}
-
-// The closed poll's picture path, or null if it has none or the image_path
-// column on polls doesn't exist yet.
-async function pollPictureForCopy(supabase: Supabase, pollId: string): Promise<string | null> {
-  const { data, error } = await supabase.from("polls").select("image_path").eq("id", pollId).maybeSingle();
-  if (error) return null;
-  return (data as { image_path: string | null } | null)?.image_path ?? null;
-}
-
-// Runs after a repeat_daily poll closes. Mirrors the same "only one poll
-// scheduled at a time" rule the admin create endpoint enforces: if the
-// admin already manually queued a different poll for the next cycle (which
-// can only have happened while this poll was still open, since a poll
-// can't be queued once one is already scheduled), that manual choice wins.
-// The repeating poll is marked repeat_paused instead of silently losing its
-// flag, so the admin panel can explain what happened.
-//
-// The copy points at the same question picture file as the original. That's
-// safe because a file is only deleted when no poll references it any more
-// (see removeFileIfUnreferenced in pollImages.ts).
-export async function continueRepeatingPoll(
-  supabase: Supabase,
-  closedPollId: string,
-  question: string,
-): Promise<string> {
-  const { data: existingScheduled } = await supabase
-    .from("polls")
-    .select("id")
-    .eq("status", "scheduled")
-    .limit(1)
-    .maybeSingle();
-
-  if (existingScheduled) {
-    await supabase.from("polls").update({ repeat_paused: true }).eq("id", closedPollId);
-    return " A different poll was already queued for the next cycle, so the repeat was paused.";
-  }
-
-  const { data: options } = await supabase
-    .from("poll_options")
-    .select("label, display_order")
-    .eq("poll_id", closedPollId)
-    .order("display_order", { ascending: true });
-
-  const imagePath = await pollPictureForCopy(supabase, closedPollId);
-
-  const { data: nextPoll, error: insertError } = await supabase
-    .from("polls")
-    .insert({
-      question,
-      status: "scheduled",
-      repeat_daily: true,
-      // Only sent when there is one, so a poll without a picture inserts the
-      // same columns it always did.
-      ...(imagePath ? { image_path: imagePath } : {}),
-      // Placeholder timestamps -- the open/close crons overwrite these
-      // with the real timestamps when they actually flip the status.
-      opens_at: new Date().toISOString(),
-      closes_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
-
-  if (insertError || !nextPoll) {
-    console.error("Failed to create repeating poll continuation:", insertError?.message);
-    return " Failed to queue tomorrow's repeat -- check the logs.";
-  }
-
-  const { error: optionsError } = await supabase.from("poll_options").insert(
-    (options ?? []).map((o) => ({
-      poll_id: nextPoll.id,
-      label: o.label,
-      display_order: o.display_order,
-    })),
-  );
-
-  if (optionsError) {
-    console.error("Failed to copy options for repeating poll:", optionsError.message);
-    return " Failed to copy options for tomorrow's repeat -- check the logs.";
-  }
-
-  return " Queued as tomorrow's repeat.";
-}
-
-// When a long (multi-day or open-ended) poll closes, a daily poll that was
-// paused to make way for it goes back in the queue. The poll that was waiting
-// is the one that closed just before the long poll opened. If something else
-// is already queued (the admin queued a poll by hand while the long poll ran)
-// that poll keeps the slot and the daily poll stays paused -- the same "manual
-// queue wins" rule as at any other time.
-export async function resumePausedRepeatingPoll(
-  supabase: Supabase,
-  longPollId: string,
-  longPollOpenedAt: string,
-): Promise<string> {
-  const before = new Date(Date.parse(longPollOpenedAt) + RESUME_WINDOW_MS).toISOString();
-  const { data: prev } = await supabase
-    .from("polls")
-    .select("id, question, repeat_daily, repeat_paused")
-    .eq("status", "closed")
-    .neq("id", longPollId)
-    .lte("closes_at", before)
-    .order("closes_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const paused = prev as { id: string; question: string; repeat_daily: boolean; repeat_paused: boolean } | null;
-  if (!paused || !paused.repeat_daily || !paused.repeat_paused) return "";
-
-  const { data: queued } = await supabase.from("polls").select("id").eq("status", "scheduled").limit(1).maybeSingle();
-  if (queued) return " A different poll is queued, so the paused daily poll stays paused.";
-
-  const message = await continueRepeatingPoll(supabase, paused.id, paused.question);
-  if (!/Queued/.test(message)) return message;
-  await supabase.from("polls").update({ repeat_paused: false }).eq("id", paused.id);
-  return " The paused daily poll was queued to resume.";
-}
-
 // ---------------------------------------------------------------------------
 // Open now
 // ---------------------------------------------------------------------------
@@ -572,5 +342,3 @@ export async function openPollNow(
 export function endsAtForOpening(durationDays: number | null | undefined, opensAt: Date): string | null {
   return durationDays ? getDaysPollEnd(opensAt, durationDays).toISOString() : null;
 }
-
-export { isLongPoll };

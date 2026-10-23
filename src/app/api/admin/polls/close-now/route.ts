@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { closePollAndFinish } from "@/lib/pollLifecycle";
+import { closePollAndFinish } from "@/lib/pollClose";
 
 // Closes an open poll right now: voting stops, the results email goes out
 // immediately (once), and a repeating or paused daily poll is handled exactly

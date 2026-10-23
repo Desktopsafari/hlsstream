@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { getOpenNowInfo, openPollNow } from "@/lib/pollLifecycle";
+import { getOpenNowInfo, openPollNow } from "@/lib/pollOpen";
 import {
   createPollWithOptions,
   deletePollWithFiles,

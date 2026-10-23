@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { isAuthorizedCronRequest } from "@/lib/cronAuth";
-import { closeDuePolls, endsAtForOpening, openQueuedPoll } from "@/lib/pollLifecycle";
+import { closeDuePolls } from "@/lib/pollClose";
+import { endsAtForOpening, openQueuedPoll } from "@/lib/pollOpen";
 import { getPollState, type PollTiming } from "@/lib/pollSchedule";
 import { durationSelect, timingSelect } from "@/lib/pollTiming";
 

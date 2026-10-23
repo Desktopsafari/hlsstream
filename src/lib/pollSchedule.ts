@@ -182,6 +182,12 @@ export function isAtCutoffHour(date: Date): boolean {
   return p.h === POLL_CLOSE_HOUR && p.min === 0;
 }
 
+// "8:00 PM ET": the cutoff hour as text, so nothing hard-codes it.
+export function cutoffLabel(): string {
+  const hour12 = POLL_CLOSE_HOUR % 12 === 0 ? 12 : POLL_CLOSE_HOUR % 12;
+  return `${hour12}:00 ${POLL_CLOSE_HOUR >= 12 ? "PM" : "AM"} ET`;
+}
+
 // What "Open now" may do right now. Before the cutoff hour it's allowed and
 // voting would run until today's cutoff; from the cutoff hour on it isn't,
 // because getPollCutoff would then point at tomorrow and the poll would sit

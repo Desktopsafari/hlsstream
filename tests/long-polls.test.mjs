@@ -4,7 +4,7 @@ import {
   optionsOf, publicPoll, queue, req, routes, scheduledPolls, setEnd, vote, withNow, json,
 } from "./support/helpers.mjs";
 
-const life = await load("lib/pollLifecycle.ts");
+const life = { ...(await load("lib/pollClose.ts")), ...(await load("lib/pollOpen.ts")) };
 
 function addPollWithOptions(fake, fields, labels = ["a", "b"]) {
   const poll = fake.addPoll(fields);

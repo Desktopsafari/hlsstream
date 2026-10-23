@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { isAuthorizedCronRequest } from "@/lib/cronAuth";
-import { closePollAndFinish, isDueForJob } from "@/lib/pollLifecycle";
+import { closePollAndFinish, isDueForJob } from "@/lib/pollClose";
 import type { PollTiming } from "@/lib/pollSchedule";
 import { timingSelect } from "@/lib/pollTiming";
 
 // Triggered daily by Vercel Cron at a fixed UTC time approximating 8pm
 // Eastern -- see vercel.json for the schedule and the DST note there.
 // Closing, the results email, and carrying a repeating poll forward all live
-// in closePollAndFinish (src/lib/pollLifecycle.ts), which Close now and
+// in closePollAndFinish (src/lib/pollClose.ts), which Close now and
 // "Open now" also use -- so a poll closed there is already closed here and its
 // results aren't emailed twice.
 //

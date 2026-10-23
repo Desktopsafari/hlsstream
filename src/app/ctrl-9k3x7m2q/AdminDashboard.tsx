@@ -8,7 +8,7 @@ import OpenNowPanel from "./OpenNowPanel";
 import PollImageField from "./PollImageField";
 import DurationField, { DEFAULT_DURATION, toDurationInput, type DurationValue } from "./DurationField";
 import OpenPollControls from "./OpenPollControls";
-import { formatEasternDate } from "@/lib/pollSchedule";
+import { cutoffLabel, formatEasternDate } from "@/lib/pollSchedule";
 import SpeciesAdmin from "./SpeciesAdmin";
 import SuggestionEventAdmin from "./SuggestionEventAdmin";
 import NotificationCategoriesAdmin from "./NotificationCategoriesAdmin";
@@ -45,9 +45,9 @@ type Poll = {
 // "Today only" / "3 days from when it opens" / "until Sun, Oct 18, 8:00 PM ET" / "until closed".
 function describeDuration(p: Poll): string {
   if (p.open_ended) return "until you close it (no end)";
-  if (p.duration_days) return `${p.duration_days} days from when it opens (ends 8:00 PM ET on the last day)`;
+  if (p.duration_days) return `${p.duration_days} days from when it opens (ends ${cutoffLabel()} on the last day)`;
   if (p.ends_at) return `until ${formatEasternDate(new Date(p.ends_at))} ET`;
-  return "today only (ends 8:00 PM ET)";
+  return `today only (ends ${cutoffLabel()})`;
 }
 
 function formatEastern(iso: string): string {
@@ -329,7 +329,7 @@ export default function AdminDashboard() {
           </div>
           <p className="text-[11px] text-muted">
             {duration.mode === "today"
-              ? "Queue poll opens it at the next noon. Open now makes it live immediately; voting still ends at 8:00 PM ET."
+              ? `Queue poll opens it at the next noon. Open now makes it live immediately; voting still ends at ${cutoffLabel()}.`
               : "Queue poll opens it at the next noon. Open now makes it live immediately."}
           </p>
           {openNowFor?.kind === "form" && (

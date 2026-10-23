@@ -9,7 +9,7 @@ import {
   type DurationColumns,
   type DurationInput,
 } from "@/lib/pollDuration";
-import { getNextNoon, parseEasternDateTime, toEasternDateTimeInput } from "@/lib/pollSchedule";
+import { cutoffLabel, getNextNoon, parseEasternDateTime, toEasternDateTimeInput } from "@/lib/pollSchedule";
 
 export type DurationValue = { mode: DurationInput["mode"]; days: string; until: string };
 
@@ -96,7 +96,7 @@ export default function DurationField({
     <fieldset className="flex flex-col gap-2 rounded-md border border-moss p-3">
       <legend className="px-1 text-sm font-medium text-ink">How long should voting run?</legend>
 
-      {radio("today", "Today only (normal, ends 8:00 PM ET)")}
+      {radio("today", `Today only (normal, ends ${cutoffLabel()})`)}
       {radio(
         "days",
         "Run for",
@@ -112,7 +112,7 @@ export default function DurationField({
             className={`${inputClass} w-16`}
           />
           <span className={longDisabled ? "text-muted" : undefined}>
-            days (ends 8:00 PM ET on the last day)
+            {`days (ends ${cutoffLabel()} on the last day)`}
           </span>
         </>,
         longDisabled,

@@ -87,6 +87,34 @@ export function isPollPastEnd(poll: PollTiming, now: Date = new Date()): boolean
   return end !== null && now.getTime() >= end.getTime();
 }
 
+// The one place that decides where a poll is in its life, from its stored
+// status AND the clock:
+//   scheduled  waiting in the queue
+//   open       taking votes
+//   ended      stored as open, but its end time has passed -- voting is
+//              refused and the card shows it closed; a cron just hasn't
+//              flipped the stored status yet
+//   closed     closed (results email sent)
+export type PollPhase = "scheduled" | "open" | "ended" | "closed";
+
+export type PollState = {
+  phase: PollPhase;
+  votingOpen: boolean;
+  // When voting ends (null = open-ended, or the poll isn't open).
+  end: Date | null;
+};
+
+export function getPollState(
+  poll: { status: string } & PollTiming,
+  now: Date = new Date(),
+): PollState {
+  if (poll.status === "scheduled") return { phase: "scheduled", votingOpen: false, end: null };
+  if (poll.status !== "open") return { phase: "closed", votingOpen: false, end: null };
+  const end = getPollEnd(poll);
+  const past = end !== null && now.getTime() >= end.getTime();
+  return { phase: past ? "ended" : "open", votingOpen: !past, end };
+}
+
 // A poll with a chosen duration (as opposed to the normal daily one).
 export function isLongPoll(poll: { ends_at?: string | null; open_ended?: boolean | null }): boolean {
   return !!poll.open_ended || !!poll.ends_at;

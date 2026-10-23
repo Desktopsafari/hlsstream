@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { isPollPastEnd, type PollTiming } from "@/lib/pollSchedule";
+import { getPollState, type PollTiming } from "@/lib/pollSchedule";
 import { timingSelect } from "@/lib/pollTiming";
 import { loadPollImagePaths, pollImageUrl } from "@/lib/pollImages";
 
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
   // Report an open poll as closed once its end has passed (8pm for a normal
   // poll, the chosen end time otherwise, never for an open-ended one), even if
   // the (imprecise) cron hasn't flipped the stored status yet.
-  if (poll.status === "open" && isPollPastEnd(poll)) {
+  if (getPollState(poll).phase === "ended") {
     poll.status = "closed";
   }
 

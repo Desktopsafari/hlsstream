@@ -14,8 +14,8 @@ import {
   formatEasternDay,
   getDaysPollEnd,
   getOpenNowWindow,
+  getPollState,
   isLongPoll,
-  isPollPastEnd,
 } from "@/lib/pollSchedule";
 import { durationColumnsExist } from "@/lib/pollTiming";
 
@@ -29,6 +29,7 @@ export type LifecycleDeps = {
 type OpenPollRow = {
   id: string;
   question: string;
+  status: string;
   repeat_daily: boolean;
   opens_at: string;
   ends_at?: string | null;
@@ -254,7 +255,7 @@ async function listOpenPolls(supabase: Supabase): Promise<OpenPollRow[]> {
   const timing = (await durationColumnsExist(supabase)) ? ", ends_at, open_ended" : "";
   const { data } = await supabase
     .from("polls")
-    .select(`id, question, repeat_daily, opens_at${timing}`)
+    .select(`id, question, status, repeat_daily, opens_at${timing}`)
     .eq("status", "open")
     .order("opens_at", { ascending: false });
   return (data ?? []) as unknown as OpenPollRow[];
@@ -315,7 +316,7 @@ export async function getOpenNowInfo(
   const end = long ? endForColumns(cols, now) : null;
 
   const open = await listOpenPolls(supabase);
-  const live = open.filter((p) => !isPollPastEnd(p, now));
+  const live = open.filter((p) => getPollState(p, now).votingOpen);
 
   const { data: scheduled } = await supabase
     .from("polls")
@@ -453,7 +454,7 @@ export async function openPollNow(
     return fail(409, "just_opened", "A poll was opened a moment ago. Wait a few seconds and check the panel before trying again.");
   }
 
-  const live = before.filter((p) => !isPollPastEnd(p, now));
+  const live = before.filter((p) => getPollState(p, now).votingOpen);
   if (live.length > 0 && !input.confirmReplace) {
     return fail(
       409,

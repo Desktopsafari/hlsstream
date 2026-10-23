@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { isPollPastEnd, type PollTiming } from "@/lib/pollSchedule";
+import { getPollState, type PollTiming } from "@/lib/pollSchedule";
 import { timingSelect } from "@/lib/pollTiming";
 
 export async function POST(request: Request) {
@@ -28,14 +28,15 @@ export async function POST(request: Request) {
     .maybeSingle();
   const poll = pollRow as unknown as ({ id: string; status: string } & PollTiming) | null;
 
-  if (!poll || poll.status !== "open") {
+  const state = poll ? getPollState(poll) : null;
+  if (!state || (state.phase !== "open" && state.phase !== "ended")) {
     return NextResponse.json({ error: "This poll isn't open for voting." }, { status: 400 });
   }
 
   // The crons that flip status to "closed" run once a day, imprecisely, so
   // the real end time is enforced here on every vote: the normal 8pm cutoff,
   // a chosen end time, or never for an open-ended poll.
-  if (isPollPastEnd(poll)) {
+  if (!state.votingOpen) {
     return NextResponse.json({ error: "Voting has closed for this poll." }, { status: 400 });
   }
 

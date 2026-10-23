@@ -10,7 +10,7 @@ import {
   type DurationColumns,
 } from "@/lib/pollDuration";
 import { durationColumnsExist } from "@/lib/pollTiming";
-import { easternHour, getNextNoon, getPollEnd, isLongPoll } from "@/lib/pollSchedule";
+import { easternHour, getNextNoon, getPollState, isLongPoll } from "@/lib/pollSchedule";
 
 export async function GET() {
   const supabase = createServiceRoleClient();
@@ -53,8 +53,7 @@ export async function GET() {
     open_ended: !!poll.open_ended,
     duration_days: poll.duration_days ?? null,
     // When voting ends for an open poll: its end instant, or null for no end.
-    voting_end:
-      poll.status === "open" ? (getPollEnd(poll)?.toISOString() ?? null) : null,
+    voting_end: getPollState(poll).end?.toISOString() ?? null,
     is_long: isLongPoll(poll),
     image_url: pollImageUrl(imagePaths?.get(poll.id) ?? null),
     // The daily open always lands in the noon hour (Eastern). A poll that went

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { isAuthorizedCronRequest } from "@/lib/cronAuth";
 import { closePollAndFinish, endsAtForOpening } from "@/lib/pollLifecycle";
-import { isLongPoll, isPollPastEnd, type PollTiming } from "@/lib/pollSchedule";
+import { getPollState, isLongPoll, type PollTiming } from "@/lib/pollSchedule";
 import { durationColumnsExist } from "@/lib/pollTiming";
 
 // Triggered daily by Vercel Cron at a fixed UTC time approximating noon
@@ -22,10 +22,10 @@ export async function GET(request: Request) {
   // hasn't been flipped to closed yet.
   const { data: openRows } = await supabase
     .from("polls")
-    .select(`id, question, repeat_daily, opens_at${hasDurations ? ", ends_at, open_ended" : ""}`)
+    .select(`id, question, status, repeat_daily, opens_at${hasDurations ? ", ends_at, open_ended" : ""}`)
     .eq("status", "open");
-  const openPolls = (openRows ?? []) as unknown as ({ id: string; question: string; repeat_daily: boolean } & PollTiming)[];
-  if (openPolls.some((p) => !isPollPastEnd(p))) {
+  const openPolls = (openRows ?? []) as unknown as ({ id: string; question: string; status: string; repeat_daily: boolean } & PollTiming)[];
+  if (openPolls.some((p) => getPollState(p).votingOpen)) {
     return NextResponse.json({ message: "A poll is already open, so the queued poll was left for later." });
   }
 

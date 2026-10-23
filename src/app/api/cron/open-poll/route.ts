@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { isAuthorizedCronRequest } from "@/lib/cronAuth";
-import { closePollAndFinish, endsAtForOpening } from "@/lib/pollLifecycle";
+import { closePollAndFinish, endsAtForOpening, openQueuedPoll } from "@/lib/pollLifecycle";
 import { getPollState, isLongPoll, type PollTiming } from "@/lib/pollSchedule";
 import { durationSelect, timingSelect } from "@/lib/pollTiming";
 
@@ -58,18 +58,13 @@ export async function GET(request: Request) {
   // that grabbed the same poll a moment earlier. An "N days" poll gets its end
   // time fixed now: 8 PM ET on the last day, counting today as day 1.
   const endsAt = endsAtForOpening(next.duration_days, now);
-  const { data: opened, error } = await supabase
-    .from("polls")
-    .update({ status: "open", opens_at: now.toISOString(), ...(endsAt ? { ends_at: endsAt } : {}) })
-    .eq("id", next.id)
-    .eq("status", "scheduled")
-    .select("id");
+  const opened = await openQueuedPoll(supabase, next.id, { now, endsAt });
 
-  if (error) {
-    console.error("Failed to open poll:", error.message);
+  if (opened.state === "error") {
+    console.error("Failed to open poll:", opened.error);
     return NextResponse.json({ error: "Failed to open poll" }, { status: 500 });
   }
-  if (!opened || opened.length === 0) {
+  if (opened.state === "not_scheduled") {
     return NextResponse.json({ message: `The queued poll was already opened.${closedMessage}` });
   }
 

@@ -371,6 +371,44 @@ function fail(status: number, code: string, error: string): OpenNowResult {
   return { ok: false, status, code, error };
 }
 
+// ---------------------------------------------------------------------------
+// The one place a queued poll becomes open (the noon job and Open now both use it)
+// ---------------------------------------------------------------------------
+
+export type OpenQueuedOutcome = { state: "opened" } | { state: "not_scheduled" } | { state: "error"; error: string };
+
+// Flips a queued poll to open, stamping opens_at and (for an "N days" poll) its
+// end time. The flip only succeeds while the poll is still queued, so whichever
+// caller gets there first opens it and the other sees "not_scheduled".
+export async function openQueuedPoll(
+  supabase: Supabase,
+  pollId: string,
+  opts: { now: Date; endsAt?: string | null },
+): Promise<OpenQueuedOutcome> {
+  const { data, error } = await supabase
+    .from("polls")
+    .update({
+      status: "open",
+      opens_at: opts.now.toISOString(),
+      ...(opts.endsAt ? { ends_at: opts.endsAt } : {}),
+    })
+    .eq("id", pollId)
+    .eq("status", "scheduled")
+    .select("id");
+  if (error) return { state: "error", error: error.message };
+  if (!data || data.length === 0) return { state: "not_scheduled" };
+  return { state: "opened" };
+}
+
+// Puts a poll back in the queue (used when an Open now has to back out).
+export function revertQueuedOpen(supabase: Supabase, pollId: string, clearEnd: boolean) {
+  return supabase
+    .from("polls")
+    .update({ status: "scheduled", ...(clearEnd ? { ends_at: null } : {}) })
+    .eq("id", pollId)
+    .eq("status", "open");
+}
+
 // Makes a queued (scheduled) poll live immediately instead of at the next
 // noon open. Voting still ends at the normal cutoff (getPollCutoff, from
 // opens_at) unless the poll has a chosen duration, in which case it ends at
@@ -443,30 +481,16 @@ export async function openPollNow(
     );
   }
 
-  const { data: claimed, error: claimError } = await supabase
-    .from("polls")
-    .update({
-      status: "open",
-      opens_at: now.toISOString(),
-      ...(endsAtOnOpen ? { ends_at: endsAtOnOpen } : {}),
-    })
-    .eq("id", target.id)
-    .eq("status", "scheduled")
-    .select("id");
-  if (claimError) {
-    console.error("Failed to open poll now:", claimError.message);
+  const claim = await openQueuedPoll(supabase, target.id, { now, endsAt: endsAtOnOpen });
+  if (claim.state === "error") {
+    console.error("Failed to open poll now:", claim.error);
     return fail(500, "db_error", "Failed to open the poll.");
   }
-  if (!claimed || claimed.length === 0) {
+  if (claim.state === "not_scheduled") {
     return fail(409, "not_scheduled", "That poll was just opened or removed by something else.");
   }
 
-  const revert = () =>
-    supabase
-      .from("polls")
-      .update({ status: "scheduled", ...(endsAtOnOpen ? { ends_at: null } : {}) })
-      .eq("id", target.id)
-      .eq("status", "open");
+  const revert = () => revertQueuedOpen(supabase, target.id, endsAtOnOpen !== null);
 
   const knownIds = new Set(before.map((p) => p.id));
   const after = await listOpenPolls(supabase);

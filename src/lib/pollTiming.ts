@@ -32,7 +32,7 @@ export async function durationColumnsExist(supabase: Supabase): Promise<boolean>
 // Column lists to append to a polls select (empty until the columns exist).
 // "Timing" is what decides when voting ends; "duration" adds the day count a
 // queued N-day poll waits with.
-export const TIMING_COLS = ", ends_at, open_ended";
+const TIMING_COLS = ", ends_at, open_ended";
 export const DURATION_COLS = ", ends_at, open_ended, duration_days";
 
 export async function timingSelect(supabase: Supabase): Promise<string> {

@@ -207,7 +207,7 @@ export async function openQueuedPoll(
 }
 
 // Puts a poll back in the queue (used when an Open now has to back out).
-export function revertQueuedOpen(supabase: Supabase, pollId: string, clearEnd: boolean) {
+function revertQueuedOpen(supabase: Supabase, pollId: string, clearEnd: boolean) {
   return supabase
     .from("polls")
     .update({ status: "scheduled", ...(clearEnd ? { ends_at: null } : {}) })

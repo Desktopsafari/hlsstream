@@ -10,7 +10,7 @@ type Supabase = ReturnType<typeof createServiceRoleClient>;
 // the naming events' bucket under polls/. A file picked in the form before the
 // poll exists waits in polls/pending/ until the poll is saved (then it's moved
 // to polls/<pollId>/), and the daily cleanup removes any that were never used.
-export const PENDING_PREFIX = "polls/pending/";
+const PENDING_PREFIX = "polls/pending/";
 const PENDING_RE = /^polls\/pending\/[A-Za-z0-9._-]+$/;
 const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 

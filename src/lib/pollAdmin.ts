@@ -30,7 +30,7 @@ export function parsePendingImage(input: unknown): string | null | undefined {
   return isPendingPath(input) ? input : undefined;
 }
 
-export type CreatePollResult =
+type CreatePollResult =
   | { ok: true; pollId: string }
   | { ok: false; status: number; error: string };
 

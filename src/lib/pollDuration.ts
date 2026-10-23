@@ -8,7 +8,7 @@ import {
   isAtCutoffHour,
   parseEasternDateTime,
 } from "@/lib/pollSchedule";
-import { POLL_CLOSE_HOUR, POLL_TIMEZONE } from "@/config/constants";
+import { POLL_TIMEZONE } from "@/config/constants";
 
 // How long voting runs. Shared by the admin form (live summary) and the API
 // (validation), so what the admin is shown is what gets saved.
@@ -39,7 +39,7 @@ export function isDailyColumns(c: DurationColumns): boolean {
 export const DURATION_SQL_HINT =
   "Multi-day and open-ended polls need the database columns first: run supabase/poll_duration.sql in the Supabase SQL Editor.";
 
-export type DurationResult =
+type DurationResult =
   | { ok: true; columns: DurationColumns }
   | { ok: false; error: string };
 
@@ -131,12 +131,10 @@ export function publicDeadline(
 // stops on time; the email goes out when a daily job notices the poll has
 // ended. Those run in the 8 PM ET hour (close job) and the noon hour (open
 // job), so an end time off the 8 PM cutoff waits for the next of those.
-export const EMAIL_NOTE_OFF_CUTOFF =
+const EMAIL_NOTE_OFF_CUTOFF =
   "Voting stops exactly at this time, but the results email is sent by a daily job: at the next run around 8 PM ET (8:00-8:59) or around noon ET (12:00-12:59). Depending on the end time that can be up to about 17 hours late. Closing it yourself with Close now sends it immediately.";
 
 export function emailNoteFor(end: Date | null): string | null {
   if (end === null) return null;
   return isAtCutoffHour(end) ? null : EMAIL_NOTE_OFF_CUTOFF;
 }
-
-export const CUTOFF_HOUR_LABEL = `${POLL_CLOSE_HOUR % 12 || 12}:00 ${POLL_CLOSE_HOUR >= 12 ? "PM" : "AM"} ET`;

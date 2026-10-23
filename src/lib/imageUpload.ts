@@ -1,6 +1,6 @@
 // Shared checks for admin image uploads: JPG/PNG/WebP up to 4MB (Vercel
 // serverless request bodies max out around 4.5MB, so stay under it).
-export const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 
 const TYPES: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -21,7 +21,7 @@ function matchesSignature(type: string, bytes: Uint8Array): boolean {
   return false;
 }
 
-export type ImageCheck =
+type ImageCheck =
   | { ok: true; ext: string; contentType: string }
   | { ok: false; error: string };
 

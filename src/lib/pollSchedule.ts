@@ -57,10 +57,6 @@ export function getPollCutoff(opensAt: string | Date): Date {
   );
 }
 
-export function isPollPastCutoff(opensAt: string | Date, now: Date = new Date()): boolean {
-  return now.getTime() >= getPollCutoff(opensAt).getTime();
-}
-
 // ---------------------------------------------------------------------------
 // Poll end times. A normal daily poll ends at the first 8 PM ET after it
 // opened (getPollCutoff). A poll with a chosen duration stores its own end

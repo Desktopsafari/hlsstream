@@ -3,7 +3,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { isAuthorizedCronRequest } from "@/lib/cronAuth";
 import { closePollAndFinish, endsAtForOpening } from "@/lib/pollLifecycle";
 import { getPollState, isLongPoll, type PollTiming } from "@/lib/pollSchedule";
-import { durationColumnsExist } from "@/lib/pollTiming";
+import { durationSelect, timingSelect } from "@/lib/pollTiming";
 
 // Triggered daily by Vercel Cron at a fixed UTC time approximating noon
 // Eastern -- see vercel.json for the schedule and README-style comments
@@ -14,7 +14,6 @@ export async function GET(request: Request) {
   }
 
   const supabase = createServiceRoleClient();
-  const hasDurations = await durationColumnsExist(supabase);
 
   // A poll that is still taking votes (opened by hand with "Open now", or a
   // multi-day / open-ended poll still running) means the queued poll waits
@@ -22,7 +21,7 @@ export async function GET(request: Request) {
   // hasn't been flipped to closed yet.
   const { data: openRows } = await supabase
     .from("polls")
-    .select(`id, question, status, repeat_daily, opens_at${hasDurations ? ", ends_at, open_ended" : ""}`)
+    .select(`id, question, status, repeat_daily, opens_at${await timingSelect(supabase)}`)
     .eq("status", "open");
   const openPolls = (openRows ?? []) as unknown as ({ id: string; question: string; status: string; repeat_daily: boolean } & PollTiming)[];
   if (openPolls.some((p) => getPollState(p).votingOpen)) {
@@ -43,7 +42,7 @@ export async function GET(request: Request) {
 
   const { data: nextPoll } = await supabase
     .from("polls")
-    .select(`id${hasDurations ? ", duration_days" : ""}`)
+    .select(`id${await durationSelect(supabase)}`)
     .eq("status", "scheduled")
     .order("created_at", { ascending: true })
     .limit(1)

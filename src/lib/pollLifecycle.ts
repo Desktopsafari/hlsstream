@@ -17,7 +17,7 @@ import {
   getPollState,
   isLongPoll,
 } from "@/lib/pollSchedule";
-import { durationColumnsExist } from "@/lib/pollTiming";
+import { loadPollDuration, timingSelect } from "@/lib/pollTiming";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 
@@ -48,25 +48,6 @@ const RESUME_WINDOW_MS = 60_000;
 export function cutoffLabel(): string {
   const hour12 = POLL_CLOSE_HOUR % 12 === 0 ? 12 : POLL_CLOSE_HOUR % 12;
   return `${hour12}:00 ${POLL_CLOSE_HOUR >= 12 ? "PM" : "AM"} ET`;
-}
-
-// The duration columns of a poll (daily when they don't exist yet).
-async function readDuration(
-  supabase: Supabase,
-  pollId: string,
-): Promise<{ cols: DurationColumns; opens_at: string | null }> {
-  if (!(await durationColumnsExist(supabase))) return { cols: DAILY_COLUMNS, opens_at: null };
-  const { data } = await supabase
-    .from("polls")
-    .select("opens_at, ends_at, open_ended, duration_days")
-    .eq("id", pollId)
-    .maybeSingle();
-  const row = data as { opens_at: string; ends_at: string | null; open_ended: boolean | null; duration_days: number | null } | null;
-  if (!row) return { cols: DAILY_COLUMNS, opens_at: null };
-  return {
-    cols: { ends_at: row.ends_at, open_ended: !!row.open_ended, duration_days: row.duration_days },
-    opens_at: row.opens_at,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +105,7 @@ export async function closePollAndFinish(
     }
   }
 
-  const { cols, opens_at } = await readDuration(supabase, poll.id);
+  const { cols, opens_at } = await loadPollDuration(supabase, poll.id);
   if (!isDailyColumns(cols) && opens_at) {
     repeatMessage += await resumePausedRepeatingPoll(supabase, poll.id, opens_at);
   }
@@ -252,10 +233,9 @@ export async function resumePausedRepeatingPoll(
 // ---------------------------------------------------------------------------
 
 async function listOpenPolls(supabase: Supabase): Promise<OpenPollRow[]> {
-  const timing = (await durationColumnsExist(supabase)) ? ", ends_at, open_ended" : "";
   const { data } = await supabase
     .from("polls")
-    .select(`id, question, status, repeat_daily, opens_at${timing}`)
+    .select(`id, question, status, repeat_daily, opens_at${await timingSelect(supabase)}`)
     .eq("status", "open")
     .order("opens_at", { ascending: false });
   return (data ?? []) as unknown as OpenPollRow[];
@@ -300,7 +280,7 @@ async function targetDuration(
   supabase: Supabase,
   opts: { pollId?: string; duration?: DurationColumns | null },
 ): Promise<DurationColumns> {
-  if (opts.pollId) return (await readDuration(supabase, opts.pollId)).cols;
+  if (opts.pollId) return (await loadPollDuration(supabase, opts.pollId)).cols;
   return opts.duration ?? DAILY_COLUMNS;
 }
 

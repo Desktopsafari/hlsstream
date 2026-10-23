@@ -3,13 +3,12 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { createPollWithOptions, parseNewOptions, parsePendingImage } from "@/lib/pollAdmin";
 import { imagesSupported, loadPollImagePaths, pollImageUrl } from "@/lib/pollImages";
 import {
-  DAILY_COLUMNS,
   DURATION_SQL_HINT,
   isDailyColumns,
   resolveDuration,
   type DurationColumns,
 } from "@/lib/pollDuration";
-import { durationColumnsExist } from "@/lib/pollTiming";
+import { DURATION_COLS, durationColumnsExist, loadPollDuration } from "@/lib/pollTiming";
 import { easternHour, getNextNoon, getPollState, isLongPoll } from "@/lib/pollSchedule";
 
 export async function GET() {
@@ -21,7 +20,7 @@ export async function GET() {
     .from("polls")
     .select(
       `id, question, status, opens_at, closes_at, created_at, repeat_daily, repeat_paused${
-        durationsAvailable ? ", ends_at, open_ended, duration_days" : ""
+        durationsAvailable ? DURATION_COLS : ""
       }`,
     )
     .order("created_at", { ascending: false })
@@ -178,18 +177,7 @@ export async function PUT(request: Request) {
   // open poll's end is changed with "Change end time" (/polls/end-time), which
   // also refuses to move it into the past.
   const durationsAvailable = await durationColumnsExist(supabase);
-  let currentDuration: DurationColumns = DAILY_COLUMNS;
-  if (durationsAvailable) {
-    const { data: d } = await supabase
-      .from("polls")
-      .select("ends_at, open_ended, duration_days")
-      .eq("id", pollId)
-      .maybeSingle();
-    const row = d as { ends_at: string | null; open_ended: boolean | null; duration_days: number | null } | null;
-    if (row) {
-      currentDuration = { ends_at: row.ends_at, open_ended: !!row.open_ended, duration_days: row.duration_days };
-    }
-  }
+  const { cols: currentDuration } = await loadPollDuration(supabase, pollId);
   let newDuration: DurationColumns | null = null;
   if (body?.duration !== undefined) {
     if (poll.status !== "scheduled") {

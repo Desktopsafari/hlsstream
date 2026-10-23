@@ -1,3 +1,6 @@
+-- SUPERSEDED by supabase/species_names.sql: the code no longer reads the
+-- residents column. Kept for the record because it was already run.
+
 -- "Residents" list on the Meet the Resident species card: who lives in the
 -- tank (frogs, fish, plants ...), each with an optional name.
 -- Run once in the Supabase SQL Editor (Dashboard -> SQL Editor -> New query

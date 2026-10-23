@@ -3,9 +3,9 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { STREAM_ID } from "@/config/constants";
 import {
   CONSERVATION_STATUSES,
-  RESIDENTS_SQL_HINT,
+  NAMES_SQL_HINT,
   loadSpeciesCardRow,
-  parseResidents,
+  parseNames,
   toSpeciesCardData,
   type InfoBlock,
 } from "@/lib/species";
@@ -14,18 +14,18 @@ const MAX_BLOCKS = 12;
 
 export async function GET() {
   const supabase = createServiceRoleClient();
-  const { row, residentsSupported, error } = await loadSpeciesCardRow(supabase);
+  const { row, namesSupported, error } = await loadSpeciesCardRow(supabase);
 
   if (error) {
     return NextResponse.json({ error }, { status: 500 });
   }
   return NextResponse.json({
     card: row ? toSpeciesCardData(row) : null,
-    residentsSupported,
+    namesSupported,
   });
 }
 
-// Saves the text fields + ordered info blocks + residents list. Images are uploaded
+// Saves the text fields + ordered info blocks + names block. Images are uploaded
 // separately via /api/admin/species/image.
 export async function PUT(request: Request) {
   const body = await request.json().catch(() => null);
@@ -71,17 +71,17 @@ export async function PUT(request: Request) {
     );
   }
 
-  const residents = parseResidents(body?.residents);
-  if (!residents.ok) {
-    return NextResponse.json({ error: residents.error }, { status: 400 });
+  const names = parseNames(body?.namesHeading, body?.names);
+  if (!names.ok) {
+    return NextResponse.json({ error: names.error }, { status: 400 });
   }
 
   const supabase = createServiceRoleClient();
-  // Until supabase/species_residents.sql is run there is no residents column:
-  // save everything else, and only refuse if residents were actually entered.
-  const { residentsSupported } = await loadSpeciesCardRow(supabase);
-  if (!residentsSupported && residents.residents.length > 0) {
-    return NextResponse.json({ error: RESIDENTS_SQL_HINT, code: "residents_unsupported" }, { status: 400 });
+  // Until supabase/species_names.sql is run there are no names columns:
+  // save everything else, and only refuse if names were actually entered.
+  const { namesSupported } = await loadSpeciesCardRow(supabase);
+  if (!namesSupported && names.names.length > 0) {
+    return NextResponse.json({ error: NAMES_SQL_HINT, code: "names_unsupported" }, { status: 400 });
   }
 
   const { error } = await supabase.from("species_cards").upsert(
@@ -91,7 +91,7 @@ export async function PUT(request: Request) {
       scientific_name: scientificName,
       conservation_status: status,
       info_blocks: infoBlocks,
-      ...(residentsSupported ? { residents: residents.residents } : {}),
+      ...(namesSupported ? { names_heading: names.heading, names: names.names } : {}),
       updated_at: new Date().toISOString(),
     },
     { onConflict: "stream_id" },

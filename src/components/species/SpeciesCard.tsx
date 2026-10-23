@@ -4,13 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
   CONSERVATION_STATUSES,
-  type Resident,
   type SpeciesCardData,
 } from "@/lib/species";
 
 const HOVER_DELAY_MS = 1000;
-// Rows shown on the compact phone card before "Show all".
-const MOBILE_RESIDENTS = 4;
+// Names shown on the compact phone card before "Show all".
+const MOBILE_NAMES = 4;
 const ANIMATION_MS = 250;
 
 // Segment colors for the conservation bar, least concern -> critical.
@@ -39,31 +38,28 @@ function StatusBar({ status }: { status: SpeciesCardData["conservationStatus"] }
   );
 }
 
-// "Frog 1: Basil" rows. Renders nothing without a list, so a card without
-// residents is exactly as before. On the compact phone card only the first
-// MOBILE_RESIDENTS rows show until "Show all"; from `lg` up, and in the
-// enlarged view, every row shows.
-function Residents({ residents, large }: { residents: Resident[]; large: boolean }) {
+// "Frog names:" then one name per line, as plain text. Renders nothing when
+// there are no names, so the card is then exactly as before. On the compact
+// phone card only the first MOBILE_NAMES show until "Show all"; from `lg`
+// up, and in the enlarged view, every name shows.
+function Names({ heading, names, large }: { heading: string; names: string[]; large: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  if (residents.length === 0) return null;
-  const collapsible = !large && residents.length > MOBILE_RESIDENTS;
+  if (names.length === 0) return null;
+  const collapsible = !large && names.length > MOBILE_NAMES;
+  const label = heading.endsWith(":") ? heading : `${heading}:`;
 
   return (
     <div className={large ? undefined : "-mt-2"}>
-      <ul className={`flex flex-col ${large ? "gap-1 text-base" : "gap-0.5 text-sm leading-snug"}`}>
-        {residents.map((r, i) => (
+      <p className={`font-semibold text-forest ${large ? "text-base" : "text-sm"}`}>{label}</p>
+      <ul className={`flex flex-col text-ink ${large ? "gap-0.5 text-base" : "text-sm leading-snug"}`}>
+        {names.map((name, i) => (
           <li
             key={i}
             className={`[overflow-wrap:anywhere] ${
-              collapsible && !expanded && i >= MOBILE_RESIDENTS ? "hidden lg:list-item" : ""
+              collapsible && !expanded && i >= MOBILE_NAMES ? "hidden lg:list-item" : ""
             }`}
           >
-            <span className="font-semibold text-forest">{r.label}:</span>{" "}
-            {r.name ? (
-              <span className="text-ink">{r.name}</span>
-            ) : (
-              <span className="italic text-muted">Name coming soon!</span>
-            )}
+            {name}
           </li>
         ))}
       </ul>
@@ -80,7 +76,7 @@ function Residents({ residents, large }: { residents: Resident[]; large: boolean
           onKeyDown={(e) => e.stopPropagation()}
           className="mt-1 text-[11px] font-semibold text-forest underline underline-offset-2 lg:hidden"
         >
-          {expanded ? "Show fewer" : `Show all ${residents.length}`}
+          {expanded ? "Show fewer" : `Show all ${names.length}`}
         </button>
       )}
     </div>
@@ -110,7 +106,7 @@ function CardBody({ card, large }: { card: SpeciesCardData; large: boolean }) {
         )}
       </div>
 
-      <Residents residents={card.residents} large={large} />
+      <Names heading={card.namesHeading} names={card.names} large={large} />
 
       {/*
         The inline (non-enlarged) card on mobile stays at the same compact
@@ -237,7 +233,7 @@ export default function SpeciesCard() {
 
   if (
     card === null ||
-    (!card.speciesName && card.infoBlocks.length === 0 && card.residents.length === 0)
+    (!card.speciesName && card.infoBlocks.length === 0 && card.names.length === 0)
   ) {
     return (
       <div className="rounded-xl border border-moss bg-card p-5 shadow-sm">

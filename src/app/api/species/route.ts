@@ -5,7 +5,7 @@ import { loadSpeciesCardRow, toSpeciesCardData } from "@/lib/species";
 export async function GET() {
   const supabase = createServiceRoleClient();
 
-  // Works with or without the residents column (supabase/species_residents.sql).
+  // Works with or without the names columns (supabase/species_names.sql).
   const { row, error } = await loadSpeciesCardRow(supabase);
 
   if (error) {

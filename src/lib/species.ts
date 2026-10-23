@@ -13,14 +13,14 @@ export type ConservationStatus = (typeof CONSERVATION_STATUSES)[number]["value"]
 
 export type InfoBlock = { title: string; body: string };
 
-// Who lives in the tank (frogs, fish, plants ...). An empty name shows as
-// "Name coming soon!".
-export type Resident = { label: string; name: string };
-export const RESIDENT_LABEL_MAX = 30;
-export const RESIDENT_NAME_MAX = 40;
-export const RESIDENTS_MAX = 12;
-export const RESIDENTS_SQL_HINT =
-  "The residents list needs its database column first: run supabase/species_residents.sql in the Supabase SQL Editor.";
+// Optional names block: a heading ("Frog names") and one name per line.
+// No names = the block isn't shown at all.
+export const NAMES_HEADING_DEFAULT = "Frog names";
+export const NAMES_HEADING_MAX = 30;
+export const NAME_MAX = 40;
+export const NAMES_MAX = 12;
+export const NAMES_SQL_HINT =
+  "The names list needs its database columns first: run supabase/species_names.sql in the Supabase SQL Editor.";
 
 // Shape sent to the browser (public URLs, camelCase).
 export type SpeciesCardData = {
@@ -30,7 +30,8 @@ export type SpeciesCardData = {
   photoUrl: string | null;
   rangeMapUrl: string | null;
   infoBlocks: InfoBlock[];
-  residents: Resident[];
+  namesHeading: string;
+  names: string[];
 };
 
 export type SpeciesCardRow = {
@@ -40,8 +41,9 @@ export type SpeciesCardRow = {
   photo_path: string | null;
   range_map_path: string | null;
   info_blocks: InfoBlock[] | null;
-  // Missing until supabase/species_residents.sql has been run.
-  residents?: Resident[] | null;
+  // Missing until supabase/species_names.sql has been run.
+  names_heading?: string | null;
+  names?: string[] | null;
 };
 
 export function publicImageUrl(
@@ -61,11 +63,8 @@ export function toSpeciesCardData(row: SpeciesCardRow): SpeciesCardData {
     photoUrl: publicImageUrl(row.photo_path),
     rangeMapUrl: publicImageUrl(row.range_map_path),
     infoBlocks: Array.isArray(row.info_blocks) ? row.info_blocks : [],
-    residents: Array.isArray(row.residents)
-      ? row.residents
-          .filter((r) => r && typeof r.label === "string" && r.label)
-          .map((r) => ({ label: r.label, name: typeof r.name === "string" ? r.name : "" }))
-      : [],
+    namesHeading: row.names_heading?.trim() || NAMES_HEADING_DEFAULT,
+    names: Array.isArray(row.names) ? row.names.filter((n) => typeof n === "string" && n.trim()) : [],
   };
 }
 
@@ -74,54 +73,54 @@ type Supabase = ReturnType<typeof createServiceRoleClient>;
 const CARD_COLUMNS =
   "species_name, scientific_name, conservation_status, photo_path, range_map_path, info_blocks";
 
-function isMissingResidentsColumn(error: { code?: string; message?: string } | null): boolean {
-  return !!error && (error.code === "42703" || /residents/i.test(error.message ?? ""));
+function isMissingNamesColumns(error: { code?: string; message?: string } | null): boolean {
+  return !!error && (error.code === "42703" || /names/i.test(error.message ?? ""));
 }
 
 // The stream's species card row. Falls back to the columns that existed
-// before the residents list, so the card keeps working until
-// supabase/species_residents.sql is run (residentsSupported is then false).
+// before the names block, so the card keeps working until
+// supabase/species_names.sql is run (namesSupported is then false).
 export async function loadSpeciesCardRow(
   supabase: Supabase,
   streamId: string = STREAM_ID,
-): Promise<{ row: SpeciesCardRow | null; residentsSupported: boolean; error: string | null }> {
-  const withResidents = await supabase
+): Promise<{ row: SpeciesCardRow | null; namesSupported: boolean; error: string | null }> {
+  const withNames = await supabase
     .from("species_cards")
-    .select(`${CARD_COLUMNS}, residents`)
+    .select(`${CARD_COLUMNS}, names_heading, names`)
     .eq("stream_id", streamId)
     .maybeSingle();
-  if (!withResidents.error) {
-    return { row: (withResidents.data as SpeciesCardRow | null) ?? null, residentsSupported: true, error: null };
+  if (!withNames.error) {
+    return { row: (withNames.data as SpeciesCardRow | null) ?? null, namesSupported: true, error: null };
   }
-  if (!isMissingResidentsColumn(withResidents.error)) {
-    return { row: null, residentsSupported: false, error: withResidents.error.message };
+  if (!isMissingNamesColumns(withNames.error)) {
+    return { row: null, namesSupported: false, error: withNames.error.message };
   }
   const { data, error } = await supabase
     .from("species_cards")
     .select(CARD_COLUMNS)
     .eq("stream_id", streamId)
     .maybeSingle();
-  return { row: (data as SpeciesCardRow | null) ?? null, residentsSupported: false, error: error?.message ?? null };
+  return { row: (data as SpeciesCardRow | null) ?? null, namesSupported: false, error: error?.message ?? null };
 }
 
-// Validates the admin's residents list: rows with neither a label nor a name
-// are dropped; every other row needs a label.
-export function parseResidents(value: unknown): { ok: true; residents: Resident[] } | { ok: false; error: string } {
-  if (value === undefined || value === null) return { ok: true, residents: [] };
-  if (!Array.isArray(value)) return { ok: false, error: "residents must be a list." };
-  const residents = value
-    .map((r) => ({
-      label: typeof r?.label === "string" ? r.label.replace(/\s+/g, " ").trim() : "",
-      name: typeof r?.name === "string" ? r.name.replace(/\s+/g, " ").trim() : "",
-    }))
-    .filter((r) => r.label || r.name);
-  if (residents.length > RESIDENTS_MAX) return { ok: false, error: `Up to ${RESIDENTS_MAX} residents.` };
-  if (residents.some((r) => !r.label)) return { ok: false, error: "Every resident needs a label (e.g. Frog 1)." };
-  if (residents.some((r) => r.label.length > RESIDENT_LABEL_MAX || r.name.length > RESIDENT_NAME_MAX)) {
-    return {
-      ok: false,
-      error: `Resident labels max ${RESIDENT_LABEL_MAX} characters, names max ${RESIDENT_NAME_MAX}.`,
-    };
+// Validates the admin's names block. The names arrive as the text box's
+// contents: one name per line, blank lines ignored, each line trimmed.
+export function parseNames(
+  heading: unknown,
+  namesText: unknown,
+): { ok: true; heading: string; names: string[] } | { ok: false; error: string } {
+  const h = typeof heading === "string" ? heading.replace(/\s+/g, " ").trim() : "";
+  if (h.length > NAMES_HEADING_MAX) {
+    return { ok: false, error: `The names heading is too long (${NAMES_HEADING_MAX} characters max).` };
   }
-  return { ok: true, residents };
+  const text = typeof namesText === "string" ? namesText : "";
+  const names = text
+    .split(/\r\n|\r|\n/)
+    .map((line) => line.replace(/[\u0000-\u001F\u007F]/g, "").trim())
+    .filter(Boolean);
+  if (names.length > NAMES_MAX) return { ok: false, error: `Up to ${NAMES_MAX} names.` };
+  if (names.some((n) => n.length > NAME_MAX)) {
+    return { ok: false, error: `Each name can be up to ${NAME_MAX} characters.` };
+  }
+  return { ok: true, heading: h || NAMES_HEADING_DEFAULT, names };
 }

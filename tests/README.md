@@ -49,7 +49,7 @@ If you ever want to test against a real database, do not add it here.
 | `pictures.test.mjs` | poll picture uploads (validation, replace, remove, shared files between a repeating poll's copies, pending uploads), working without the picture column |
 | `unlink.test.mjs` | votes unlinked from browser ids about 7 days after the real close |
 | `announcements.test.mjs` | announcement cards: start/end/switch visibility from the clock, Eastern times across the clock change, the 3-card cap (newest first), validation, button links (poll anchor, internal paths, https only; javascript: and other schemes refused), picture uploads (validation, replace, remove, shared files, pending uploads), working without the table |
-| `residents.test.mjs` | the species card residents list: saving, order, validation, blank names, working without the column |
+| `species-names.test.mjs` | the species card names block: one name per line, blank lines and spaces dropped, heading default and limits, 12-name cap, working without the columns |
 
 ## Scripts
 

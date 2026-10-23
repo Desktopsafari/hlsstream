@@ -16,14 +16,14 @@ const COLUMNS = {
 const tick = () => new Promise((r) => setImmediate(r));
 
 // announcementsTable: false = supabase/announcements.sql not run yet.
-// residentsColumn: false = supabase/species_residents.sql not run yet.
-export function createFake({ imageColumn = true, durationColumns = true, announcementsTable = true, residentsColumn = true } = {}) {
+// namesColumns: false = supabase/species_names.sql not run yet.
+export function createFake({ imageColumn = true, durationColumns = true, announcementsTable = true, namesColumns = true } = {}) {
   const db = { polls: [], poll_options: [], votes: [], announcements: [], species_cards: [] };
   const files = new Map(); // `${bucket}/${path}` -> { created_at, size }
   const log = [];
 
   const cols = (table) =>
-    table === "species_cards" ? [...COLUMNS.species_cards, ...(residentsColumn ? ["residents"] : [])] :
+    table === "species_cards" ? [...COLUMNS.species_cards, ...(namesColumns ? ["names_heading", "names"] : [])] :
     table === "polls" ? [...COLUMNS.polls, ...(imageColumn ? ["image_path"] : []), ...(durationColumns ? ["ends_at", "open_ended", "duration_days"] : [])] : COLUMNS[table];
 
   const missing = (col) => ({ code: "42703", message: `column ${col} does not exist` });
@@ -232,7 +232,7 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
       const row = {
         id: randomUUID(), stream_id: "main", species_name: "TEST frog", scientific_name: null, conservation_status: null,
         photo_path: null, range_map_path: null, info_blocks: [], updated_at: new Date().toISOString(),
-        ...(residentsColumn ? { residents: null } : {}), ...c,
+        ...(namesColumns ? { names_heading: "Frog names", names: [] } : {}), ...c,
       };
       db.species_cards.push(row);
       return row;

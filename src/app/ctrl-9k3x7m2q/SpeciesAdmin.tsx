@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
   CONSERVATION_STATUSES,
+  RESIDENT_LABEL_MAX,
+  RESIDENT_NAME_MAX,
+  RESIDENTS_MAX,
   type InfoBlock,
+  type Resident,
   type SpeciesCardData,
 } from "@/lib/species";
 
@@ -98,6 +102,8 @@ export default function SpeciesAdmin() {
   const [scientificName, setScientificName] = useState("");
   const [status, setStatus] = useState("");
   const [blocks, setBlocks] = useState<InfoBlock[]>([]);
+  const [residents, setResidents] = useState<Resident[]>([]);
+  const [residentsSupported, setResidentsSupported] = useState(true);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [rangeUrl, setRangeUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -112,7 +118,9 @@ export default function SpeciesAdmin() {
       setLoaded(true);
       return;
     }
-    const { card }: { card: SpeciesCardData | null } = await res.json();
+    const { card, residentsSupported: supported }: { card: SpeciesCardData | null; residentsSupported?: boolean } =
+      await res.json();
+    setResidentsSupported(supported !== false);
     setPhotoUrl(card?.photoUrl ?? null);
     setRangeUrl(card?.rangeMapUrl ?? null);
     if (includeText) {
@@ -120,6 +128,7 @@ export default function SpeciesAdmin() {
       setScientificName(card?.scientificName ?? "");
       setStatus(card?.conservationStatus ?? "");
       setBlocks(card?.infoBlocks ?? []);
+      setResidents(card?.residents ?? []);
     }
     setLoaded(true);
   }
@@ -136,6 +145,20 @@ export default function SpeciesAdmin() {
     setBlocks(next);
   }
 
+  function moveResident(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= residents.length) return;
+    const next = [...residents];
+    [next[index], next[target]] = [next[target], next[index]];
+    setResidents(next);
+  }
+
+  function editResident(index: number, change: Partial<Resident>) {
+    const next = [...residents];
+    next[index] = { ...next[index], ...change };
+    setResidents(next);
+  }
+
   async function save() {
     setSaving(true);
     setError(null);
@@ -149,6 +172,7 @@ export default function SpeciesAdmin() {
         scientificName,
         conservationStatus: status || null,
         infoBlocks: blocks,
+        ...(residentsSupported ? { residents } : {}),
       }),
     });
 
@@ -281,6 +305,89 @@ export default function SpeciesAdmin() {
             </div>
           </div>
 
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="text-sm font-medium text-ink">Residents</p>
+              <p className="text-[11px] text-muted">
+                Optional. Who lives here: frogs, fish, plants, anything. Shown on the card as
+                &quot;Label: Name&quot;, or &quot;Name coming soon!&quot; while the name is blank.
+              </p>
+            </div>
+            {!residentsSupported ? (
+              <p className="text-sm text-amber">
+                The residents list needs its database column first: run
+                supabase/species_residents.sql in the Supabase SQL Editor, then reload this page.
+              </p>
+            ) : (
+              <>
+                {residents.length === 0 && (
+                  <p className="text-sm text-muted">No residents listed (the card shows none).</p>
+                )}
+                {residents.map((resident, i) => (
+                  <div key={i} className="flex flex-wrap gap-2 rounded-md border border-moss p-3 sm:flex-nowrap">
+                    <input
+                      value={resident.label}
+                      onChange={(e) => editResident(i, { label: e.target.value })}
+                      placeholder="Label (e.g. Frog 1, Neon tetras)"
+                      aria-label={`Resident ${i + 1} label`}
+                      maxLength={RESIDENT_LABEL_MAX}
+                      className={`${inputClass} min-w-0 flex-1`}
+                    />
+                    <input
+                      value={resident.name}
+                      onChange={(e) => editResident(i, { name: e.target.value })}
+                      placeholder="Name (optional)"
+                      aria-label={`Resident ${i + 1} name`}
+                      maxLength={RESIDENT_NAME_MAX}
+                      className={`${inputClass} min-w-0 flex-1`}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => moveResident(i, -1)}
+                        disabled={i === 0}
+                        aria-label="Move up"
+                        className="rounded-md border border-moss px-2 text-muted hover:bg-parchment disabled:opacity-30"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveResident(i, 1)}
+                        disabled={i === residents.length - 1}
+                        aria-label="Move down"
+                        className="rounded-md border border-moss px-2 text-muted hover:bg-parchment disabled:opacity-30"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setResidents(residents.filter((_, idx) => idx !== i))}
+                        aria-label="Remove resident"
+                        className="rounded-md border border-moss px-2 text-muted hover:bg-parchment"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setResidents([...residents, { label: "", name: "" }])}
+                    disabled={residents.length >= RESIDENTS_MAX}
+                    className="rounded-md border border-moss px-3 py-1.5 text-sm text-forest hover:bg-parchment disabled:opacity-40"
+                  >
+                    + Add resident
+                  </button>
+                  {residents.length >= RESIDENTS_MAX && (
+                    <span className="ml-2 text-[11px] text-muted">Up to {RESIDENTS_MAX}.</span>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -294,8 +401,8 @@ export default function SpeciesAdmin() {
             {error && <p className="text-sm text-amber">{error}</p>}
           </div>
           <p className="text-[11px] text-muted">
-            Images upload immediately when chosen. Text, status, and block changes apply when you
-            press Save.
+            Images upload immediately when chosen. Text, status, block and resident changes apply
+            when you press Save.
           </p>
         </div>
       )}

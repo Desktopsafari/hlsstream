@@ -11,6 +11,7 @@ import OpenPollControls from "./OpenPollControls";
 import { cutoffLabel, formatEasternDate } from "@/lib/pollSchedule";
 import SpeciesAdmin from "./SpeciesAdmin";
 import SuggestionEventAdmin from "./SuggestionEventAdmin";
+import AnnouncementsAdmin from "./AnnouncementsAdmin";
 import NotificationCategoriesAdmin from "./NotificationCategoriesAdmin";
 import BroadcastComposer from "./BroadcastComposer";
 import SuggestionsAdmin from "./SuggestionsAdmin";
@@ -462,6 +463,8 @@ export default function AdminDashboard() {
           )}
         </div>
       </section>
+
+      <AnnouncementsAdmin />
 
       <SuggestionEventAdmin />
 

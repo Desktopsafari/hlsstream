@@ -21,7 +21,7 @@ Read this before changing anything here.
   read or change real polls, votes, pictures or send a real email.
 - `support/register.mjs` also overwrites the Supabase environment variables with
   obviously fake values and removes `RESEND_API_KEY`, as a second safety net.
-- All polls, options and votes in the tests are made-up ("TEST ...") and live in memory
+- All polls, options, votes, announcements and species cards in the tests are made-up ("TEST ...") and live in memory
   for the length of one test.
 
 If you ever want to test against a real database, do not add it here.
@@ -48,6 +48,8 @@ If you ever want to test against a real database, do not add it here.
 | `long-polls.test.mjs` | 3-day and open-ended polls across simulated days, pause/resume of the daily poll, Change end time, email timing, validation, working without the duration columns |
 | `pictures.test.mjs` | poll picture uploads (validation, replace, remove, shared files between a repeating poll's copies, pending uploads), working without the picture column |
 | `unlink.test.mjs` | votes unlinked from browser ids about 7 days after the real close |
+| `announcements.test.mjs` | announcement cards: start/end/switch visibility from the clock, Eastern times across the clock change, the 3-card cap (newest first), validation, button links (poll anchor, internal paths, https only; javascript: and other schemes refused), picture uploads (validation, replace, remove, shared files, pending uploads), working without the table |
+| `residents.test.mjs` | the species card residents list: saving, order, validation, blank names, working without the column |
 
 ## Scripts
 

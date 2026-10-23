@@ -1,16 +1,19 @@
 import type { ReactNode } from "react";
 
 export default function Card({
+  id,
   title,
   children,
   className = "",
 }: {
+  id?: string;
   title?: string;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <div
+      id={id}
       className={`rounded-xl border border-moss bg-card p-5 shadow-sm ${className}`}
     >
       {title && (

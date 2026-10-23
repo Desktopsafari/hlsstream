@@ -3,32 +3,29 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { STREAM_ID } from "@/config/constants";
 import {
   CONSERVATION_STATUSES,
+  RESIDENTS_SQL_HINT,
+  loadSpeciesCardRow,
+  parseResidents,
   toSpeciesCardData,
   type InfoBlock,
-  type SpeciesCardRow,
 } from "@/lib/species";
 
 const MAX_BLOCKS = 12;
 
 export async function GET() {
   const supabase = createServiceRoleClient();
-  const { data, error } = await supabase
-    .from("species_cards")
-    .select(
-      "species_name, scientific_name, conservation_status, photo_path, range_map_path, info_blocks",
-    )
-    .eq("stream_id", STREAM_ID)
-    .maybeSingle();
+  const { row, residentsSupported, error } = await loadSpeciesCardRow(supabase);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error }, { status: 500 });
   }
   return NextResponse.json({
-    card: data ? toSpeciesCardData(data as SpeciesCardRow) : null,
+    card: row ? toSpeciesCardData(row) : null,
+    residentsSupported,
   });
 }
 
-// Saves the text fields + ordered info blocks. Images are uploaded
+// Saves the text fields + ordered info blocks + residents list. Images are uploaded
 // separately via /api/admin/species/image.
 export async function PUT(request: Request) {
   const body = await request.json().catch(() => null);
@@ -74,7 +71,19 @@ export async function PUT(request: Request) {
     );
   }
 
+  const residents = parseResidents(body?.residents);
+  if (!residents.ok) {
+    return NextResponse.json({ error: residents.error }, { status: 400 });
+  }
+
   const supabase = createServiceRoleClient();
+  // Until supabase/species_residents.sql is run there is no residents column:
+  // save everything else, and only refuse if residents were actually entered.
+  const { residentsSupported } = await loadSpeciesCardRow(supabase);
+  if (!residentsSupported && residents.residents.length > 0) {
+    return NextResponse.json({ error: RESIDENTS_SQL_HINT, code: "residents_unsupported" }, { status: 400 });
+  }
+
   const { error } = await supabase.from("species_cards").upsert(
     {
       stream_id: STREAM_ID,
@@ -82,6 +91,7 @@ export async function PUT(request: Request) {
       scientific_name: scientificName,
       conservation_status: status,
       info_blocks: infoBlocks,
+      ...(residentsSupported ? { residents: residents.residents } : {}),
       updated_at: new Date().toISOString(),
     },
     { onConflict: "stream_id" },

@@ -6,6 +6,9 @@ import ViewerCount from "@/components/viewers/ViewerCount";
 import NotifyMe from "@/components/notify/NotifyMe";
 import SuggestionEventCard from "@/components/event/SuggestionEventCard";
 import Card from "@/components/ui/Card";
+import Announcements from "@/components/announcement/Announcements";
+import PollAnchorScroll from "@/components/announcement/PollAnchorScroll";
+import { POLL_ANCHOR_ID } from "@/lib/announcementLinks";
 import { SITE_NAME } from "@/config/constants";
 
 export default function HomePage() {
@@ -20,13 +23,14 @@ export default function HomePage() {
 
       {/*
         Below `lg` both column wrappers are `display: contents`, so every card
-        is a direct grid item and the mobile/tablet stacking (video -> event ->
-        species -> chat -> poll) comes from the `order` utilities, exactly as
+        is a direct grid item and the mobile/tablet stacking (video ->
+        announcements -> event -> species -> chat -> poll) comes from the `order` utilities, exactly as
         before. At `lg` the wrappers become two independent columns, so the
         event card and poll follow the video directly instead of waiting for
         the whole row to finish -- the chat card gets taller once someone
         joins it, and in a shared row that left a gap under the stream.
-        The event card renders nothing when no event is active.
+        The event card renders nothing when no event is active, and the
+        announcements render nothing when none are showing.
       */}
       <div className="grid grid-cols-1 gap-x-6 gap-y-8 lg:grid-cols-[1fr_360px] lg:items-start">
         <div className="contents lg:flex lg:flex-col lg:gap-8">
@@ -45,9 +49,18 @@ export default function HomePage() {
             </div>
           </div>
 
+          {/*
+            Rendered on the server, so cards that are showing are in the HTML
+            from the start and don't push the page down after load. No order
+            class: on phones it follows the video (order 0) and comes before
+            the event and species cards (order 1). Not in the chat card's
+            height formula: that matches the video row only, which sits above.
+          */}
+          <Announcements />
+
           <SuggestionEventCard />
 
-          <Card title="Today's Vote" className="order-3 self-start lg:order-none lg:self-auto">
+          <Card id={POLL_ANCHOR_ID} title="Today's Vote" className="order-3 self-start lg:order-none lg:self-auto">
             <PollCard />
           </Card>
         </div>
@@ -74,6 +87,7 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+      <PollAnchorScroll />
     </div>
   );
 }

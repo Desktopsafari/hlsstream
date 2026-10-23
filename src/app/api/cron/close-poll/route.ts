@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { isAuthorizedCronRequest } from "@/lib/cronAuth";
-import { closePollAndFinish } from "@/lib/pollLifecycle";
-import { isLongPoll, isPollPastEnd, type PollTiming } from "@/lib/pollSchedule";
+import { closePollAndFinish, isDueForJob } from "@/lib/pollLifecycle";
+import type { PollTiming } from "@/lib/pollSchedule";
 import { timingSelect } from "@/lib/pollTiming";
 
 // Triggered daily by Vercel Cron at a fixed UTC time approximating 8pm
@@ -24,18 +24,18 @@ export async function GET(request: Request) {
 
   const { data: row } = await supabase
     .from("polls")
-    .select(`id, question, repeat_daily, opens_at${await timingSelect(supabase)}`)
+    .select(`id, question, status, repeat_daily, opens_at${await timingSelect(supabase)}`)
     .eq("status", "open")
     .order("opens_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const openPoll = row as unknown as ({ id: string; question: string; repeat_daily: boolean } & PollTiming) | null;
+  const openPoll = row as unknown as ({ id: string; question: string; status: string; repeat_daily: boolean } & PollTiming) | null;
 
   if (!openPoll) {
     return NextResponse.json({ message: "No open poll to close." });
   }
 
-  if (isLongPoll(openPoll) && !isPollPastEnd(openPoll)) {
+  if (!isDueForJob(openPoll, "evening")) {
     return NextResponse.json({
       message: "A multi-day or open-ended poll is still running, so it was left open.",
       pollId: openPoll.id,

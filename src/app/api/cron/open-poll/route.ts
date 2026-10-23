@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { isAuthorizedCronRequest } from "@/lib/cronAuth";
-import { closePollAndFinish, endsAtForOpening, openQueuedPoll } from "@/lib/pollLifecycle";
-import { getPollState, isLongPoll, type PollTiming } from "@/lib/pollSchedule";
+import { closeDuePolls, endsAtForOpening, openQueuedPoll } from "@/lib/pollLifecycle";
+import { getPollState, type PollTiming } from "@/lib/pollSchedule";
 import { durationSelect, timingSelect } from "@/lib/pollTiming";
 
 // Triggered daily by Vercel Cron at a fixed UTC time approximating noon
@@ -31,14 +31,7 @@ export async function GET(request: Request) {
   // A multi-day poll whose end time has passed is closed here (results emailed
   // once) before the queue moves on, so its email never waits for the 8pm job.
   // Normal daily polls are left to the close job, exactly as before.
-  let closedMessage = "";
-  for (const p of openPolls) {
-    if (!isLongPoll(p)) continue;
-    const outcome = await closePollAndFinish(supabase, p);
-    if (outcome.state === "closed") {
-      closedMessage += ` Closed the ended poll "${p.question}" and emailed its results.${outcome.repeatMessage}`;
-    }
-  }
+  const closedMessage = await closeDuePolls(supabase, openPolls, "noon");
 
   const { data: nextPoll } = await supabase
     .from("polls")

@@ -16,6 +16,7 @@ import {
   getOpenNowWindow,
   getPollState,
   isLongPoll,
+  type PollTiming,
 } from "@/lib/pollSchedule";
 import { loadPollDuration, timingSelect } from "@/lib/pollTiming";
 
@@ -110,6 +111,41 @@ export async function closePollAndFinish(
     repeatMessage += await resumePausedRepeatingPoll(supabase, poll.id, opens_at);
   }
   return { state: "closed", repeatMessage };
+}
+
+// Which open polls each daily job may close. The 8 PM job closes a normal poll
+// whenever it runs (as it always has) and a long poll only once its end time has
+// passed; the noon job only ever closes long polls that have ended -- a normal
+// poll is left to the 8 PM job.
+export type CronJob = "evening" | "noon";
+
+export function isDueForJob(
+  poll: { status: string } & PollTiming,
+  job: CronJob,
+  now: Date = new Date(),
+): boolean {
+  const long = isLongPoll(poll);
+  const ended = getPollState(poll, now).phase === "ended";
+  return job === "evening" ? !long || ended : long && ended;
+}
+
+// Closes (and emails, once each) every open poll the job is due to close, and
+// returns the text the job adds to its response.
+export async function closeDuePolls(
+  supabase: Supabase,
+  polls: ({ id: string; question: string; repeat_daily: boolean; status: string } & PollTiming)[],
+  job: CronJob,
+  deps: LifecycleDeps = {},
+): Promise<string> {
+  let message = "";
+  for (const p of polls) {
+    if (!isDueForJob(p, job)) continue;
+    const outcome = await closePollAndFinish(supabase, p, deps);
+    if (outcome.state === "closed") {
+      message += ` Closed the ended poll "${p.question}" and emailed its results.${outcome.repeatMessage}`;
+    }
+  }
+  return message;
 }
 
 // The closed poll's picture path, or null if it has none or the image_path

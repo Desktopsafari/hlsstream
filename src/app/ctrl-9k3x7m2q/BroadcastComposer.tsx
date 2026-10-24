@@ -79,7 +79,7 @@ export default function BroadcastComposer() {
   return (
     <section className="rounded-xl border border-moss bg-card p-5 shadow-sm">
       <h2 className="mb-3 font-heading text-lg font-semibold text-forest">
-        Compose &amp; Send Announcement
+        Compose &amp; Send Email
       </h2>
 
       {confirming ? (

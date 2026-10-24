@@ -238,7 +238,7 @@ export default function SpeciesAdmin() {
                     }}
                     placeholder="Title (e.g. DIET)"
                     maxLength={40}
-                    className={`${inputClass} flex-1`}
+                    className={`${inputClass} min-w-0 flex-1`}
                   />
                   <button
                     type="button"

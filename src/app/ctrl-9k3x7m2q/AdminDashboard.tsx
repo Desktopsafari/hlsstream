@@ -16,6 +16,9 @@ import AnnouncementsAdmin from "./AnnouncementsAdmin";
 import NotificationCategoriesAdmin from "./NotificationCategoriesAdmin";
 import BroadcastComposer from "./BroadcastComposer";
 import SuggestionsAdmin from "./SuggestionsAdmin";
+import AdminTabs from "./AdminTabs";
+import CollapsibleSection from "./CollapsibleSection";
+import LiveNowStrip from "./LiveNowStrip";
 
 type PollOptionResult = {
   option_id: string;
@@ -248,7 +251,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-8 px-4 py-10 sm:px-6">
+    <div className="mx-auto flex max-w-4xl lg:max-w-[69rem] flex-col gap-8 px-4 py-10 sm:px-6">
       <div className="flex items-center justify-between">
         <h1 className="font-heading text-2xl font-semibold text-forest">Admin</h1>
         <button
@@ -259,291 +262,347 @@ export default function AdminDashboard() {
         </button>
       </div>
 
-      {/* Next poll */}
-      <section className="rounded-xl border border-moss bg-card p-5 shadow-sm">
-        <h2 className="mb-3 font-heading text-lg font-semibold text-forest">Set Next Poll</h2>
-        <form onSubmit={submitPoll} className="flex flex-col gap-3">
-          <input
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Poll question"
-            className="rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
-          />
-          {imagesSupported ? (
-            <PollImageField url={image?.url ?? null} onUpload={uploadFormPicture} onRemove={removeFormPicture} />
-          ) : (
-            <p className="text-[11px] text-muted">
-              The poll picture is off until supabase/poll_question_image.sql has been run in the
-              Supabase SQL Editor.
-            </p>
-          )}
-          {options.map((opt, i) => (
-            <input
-              key={i}
-              value={opt}
-              onChange={(e) => {
-                const next = [...options];
-                next[i] = e.target.value;
-                setOptions(next);
-              }}
-              placeholder={`Option ${i + 1}`}
-              className="rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
-            />
-          ))}
-          <DurationField
-            value={duration}
-            onChange={setDuration}
-            repeatDaily={repeatDaily}
-            supported={durationsSupported}
-          />
-          <label className="flex items-center gap-2 text-sm text-ink">
-            <input
-              type="checkbox"
-              checked={repeatDaily}
-              disabled={duration.mode !== "today"}
-              onChange={(e) => setRepeatDaily(e.target.checked)}
-              className="h-4 w-4 rounded border-moss"
-            />
-            <span className={duration.mode !== "today" ? "text-muted" : undefined}>Repeat this poll daily</span>
-          </label>
-          {duration.mode !== "today" && (
-            <p className="-mt-2 text-[11px] text-muted">
-              Not available for a multi-day or open-ended poll. Choose &ldquo;Today only&rdquo; above to
-              repeat daily.
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setOptions([...options, ""])}
-              className="rounded-md border border-moss px-3 py-1.5 text-sm text-forest hover:bg-parchment"
-            >
-              + Add option
-            </button>
-            <button
-              type="submit"
-              disabled={pollSubmitting}
-              className="rounded-md bg-forest px-3 py-1.5 text-sm font-semibold text-parchment hover:bg-forest-dark disabled:opacity-50"
-            >
-              Queue poll
-            </button>
-            <button
-              type="button"
-              onClick={startFormOpenNow}
-              disabled={pollSubmitting || openNowFor?.kind === "form"}
-              className="rounded-md border border-forest px-3 py-1.5 text-sm font-semibold text-forest hover:bg-parchment disabled:opacity-50"
-            >
-              Open now
-            </button>
-          </div>
-          <p className="text-[11px] text-muted">
-            {duration.mode === "today"
-              ? `Queue poll opens it at the next noon. Open now makes it live immediately; voting still ends at ${cutoffLabel()}.`
-              : "Queue poll opens it at the next noon. Open now makes it live immediately."}
-          </p>
-          {openNowFor?.kind === "form" && (
-            <OpenNowPanel
-              newPoll={{
-                question,
-                options: filledOptions,
-                repeatDaily,
-                imagePath: image?.path ?? null,
-                duration: toDurationInput(duration),
-              }}
-              onCancel={() => setOpenNowFor(null)}
-              onQueueInstead={queuePoll}
-              onOpened={(message) => {
-                setOpenNowFor(null);
-                resetPollForm();
-                setPollNotice(message);
-                loadPolls();
-              }}
-            />
-          )}
-          {pollError && <p className="text-sm text-amber">{pollError}</p>}
-          {pollNotice && <p className="text-sm text-forest">{pollNotice}</p>}
-        </form>
-      </section>
+      <LiveNowStrip />
 
-      {/* Poll history */}
-      <section className="rounded-xl border border-moss bg-card p-5 shadow-sm">
-        <h2 className="mb-3 font-heading text-lg font-semibold text-forest">Poll History</h2>
-        <AutoHideSetting
-          supported={hideSupported}
-          hours={autoHideHours}
-          onChanged={(message) => {
-            setHistoryNotice(message);
-            loadPolls();
-          }}
-        />
-        {historyNotice && <p className="mb-3 text-sm text-forest">{historyNotice}</p>}
-        <div className="flex flex-col gap-4">
-          {polls.length === 0 && <p className="text-sm text-muted">No polls yet.</p>}
-          {polls.map((poll) =>
-            editingPollId === poll.id ? (
-              <PollEditor
-                key={poll.id}
-                poll={poll}
-                imagesSupported={imagesSupported}
-                durationsSupported={durationsSupported}
-                onCancel={() => {
-                  setEditingPollId(null);
-                  loadPolls();
-                }}
-                onSaved={() => {
-                  setEditingPollId(null);
-                  loadPolls();
-                }}
-              />
-            ) : (
-              <div key={poll.id} className="border-b border-moss pb-3 last:border-0">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2">
-                    {poll.image_url && (
-                      <span className="relative aspect-video w-12 shrink-0 overflow-hidden rounded border border-moss">
-                        <Image src={poll.image_url} alt="" fill sizes="48px" className="object-cover" />
-                      </span>
-                    )}
-                    <p className="text-sm font-semibold text-ink">{poll.question}</p>
+      {/*
+        Tabs (see AdminTabs). The sections inside are the same components and
+        markup as before, only grouped; each can be collapsed (CollapsibleSection).
+      */}
+      <AdminTabs
+        tabs={[
+          {
+            id: "polls",
+            label: "Polls",
+            content: [
+            <CollapsibleSection key="Set Next Poll" title="Set Next Poll">
+              <section className="rounded-xl border border-moss bg-card p-5 shadow-sm">
+                <h2 className="mb-3 font-heading text-lg font-semibold text-forest">Set Next Poll</h2>
+                <form onSubmit={submitPoll} className="flex flex-col gap-3">
+                  <input
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    placeholder="Poll question"
+                    className="rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
+                  />
+                  {imagesSupported ? (
+                    <PollImageField url={image?.url ?? null} onUpload={uploadFormPicture} onRemove={removeFormPicture} />
+                  ) : (
+                    <p className="text-[11px] text-muted">
+                      The poll picture is off until supabase/poll_question_image.sql has been run in the
+                      Supabase SQL Editor.
+                    </p>
+                  )}
+                  {options.map((opt, i) => (
+                    <input
+                      key={i}
+                      value={opt}
+                      onChange={(e) => {
+                        const next = [...options];
+                        next[i] = e.target.value;
+                        setOptions(next);
+                      }}
+                      placeholder={`Option ${i + 1}`}
+                      className="rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
+                    />
+                  ))}
+                  <DurationField
+                    value={duration}
+                    onChange={setDuration}
+                    repeatDaily={repeatDaily}
+                    supported={durationsSupported}
+                  />
+                  <label className="flex items-center gap-2 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      checked={repeatDaily}
+                      disabled={duration.mode !== "today"}
+                      onChange={(e) => setRepeatDaily(e.target.checked)}
+                      className="h-4 w-4 rounded border-moss"
+                    />
+                    <span className={duration.mode !== "today" ? "text-muted" : undefined}>Repeat this poll daily</span>
+                  </label>
+                  {duration.mode !== "today" && (
+                    <p className="-mt-2 text-[11px] text-muted">
+                      Not available for a multi-day or open-ended poll. Choose &ldquo;Today only&rdquo; above to
+                      repeat daily.
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOptions([...options, ""])}
+                      className="rounded-md border border-moss px-3 py-1.5 text-sm text-forest hover:bg-parchment"
+                    >
+                      + Add option
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={pollSubmitting}
+                      className="rounded-md bg-forest px-3 py-1.5 text-sm font-semibold text-parchment hover:bg-forest-dark disabled:opacity-50"
+                    >
+                      Queue poll
+                    </button>
+                    <button
+                      type="button"
+                      onClick={startFormOpenNow}
+                      disabled={pollSubmitting || openNowFor?.kind === "form"}
+                      className="rounded-md border border-forest px-3 py-1.5 text-sm font-semibold text-forest hover:bg-parchment disabled:opacity-50"
+                    >
+                      Open now
+                    </button>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs uppercase text-muted">{poll.status}</span>
-                    {poll.status === "scheduled" && (
-                      <button
-                        onClick={() => setOpenNowFor({ kind: "poll", pollId: poll.id })}
-                        disabled={openNowFor?.kind === "poll" && openNowFor.pollId === poll.id}
-                        className="rounded-md border border-forest px-2 py-1 text-xs font-semibold text-forest hover:bg-parchment disabled:opacity-50"
-                      >
-                        Open now
-                      </button>
-                    )}
-                    {poll.status !== "closed" && (
-                      <button
-                        onClick={() => setEditingPollId(poll.id)}
-                        className="rounded-md border border-moss px-2 py-1 text-xs text-forest hover:bg-parchment"
-                      >
-                        Edit
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {poll.repeat_daily && !poll.repeat_paused && (
-                  <p className="mt-1 text-xs font-semibold text-forest">🔁 Repeats daily</p>
-                )}
-                {poll.repeat_paused && (
-                  <p className="mt-1 text-xs text-amber">
-                    🔁 Repeating poll paused — a different poll was manually queued for the next
-                    cycle.
+                  <p className="text-[11px] text-muted">
+                    {duration.mode === "today"
+                      ? `Queue poll opens it at the next noon. Open now makes it live immediately; voting still ends at ${cutoffLabel()}.`
+                      : "Queue poll opens it at the next noon. Open now makes it live immediately."}
                   </p>
-                )}
-                {poll.opened_early && (
-                  <p className="mt-1 text-xs text-amber">
-                    ⚡ Opened early with Open now at {formatEastern(poll.opens_at)} ET
-                  </p>
-                )}
-                <PollVisibilityControls
-                  pollId={poll.id}
-                  status={poll.status}
-                  visibility={poll.visibility}
-                  forceShown={poll.force_shown}
+                  {openNowFor?.kind === "form" && (
+                    <OpenNowPanel
+                      newPoll={{
+                        question,
+                        options: filledOptions,
+                        repeatDaily,
+                        imagePath: image?.path ?? null,
+                        duration: toDurationInput(duration),
+                      }}
+                      onCancel={() => setOpenNowFor(null)}
+                      onQueueInstead={queuePoll}
+                      onOpened={(message) => {
+                        setOpenNowFor(null);
+                        resetPollForm();
+                        setPollNotice(message);
+                        loadPolls();
+                      }}
+                    />
+                  )}
+                  {pollError && <p className="text-sm text-amber">{pollError}</p>}
+                  {pollNotice && <p className="text-sm text-forest">{pollNotice}</p>}
+                </form>
+              </section>
+            </CollapsibleSection>,
+            <CollapsibleSection key="Poll History" title="Poll History">
+              <section className="rounded-xl border border-moss bg-card p-5 shadow-sm">
+                <h2 className="mb-3 font-heading text-lg font-semibold text-forest">Poll History</h2>
+                <AutoHideSetting
                   supported={hideSupported}
+                  hours={autoHideHours}
                   onChanged={(message) => {
                     setHistoryNotice(message);
                     loadPolls();
                   }}
                 />
-                {poll.status !== "closed" && (poll.is_long || poll.duration_days) && (
-                  <p className="mt-1 text-xs font-semibold text-forest">⏱ Voting runs {describeDuration(poll)}</p>
-                )}
-                {poll.status === "open" && (
-                  <OpenPollControls
-                    poll={poll}
-                    durationsSupported={durationsSupported}
-                    onChanged={(message) => {
-                      setHistoryNotice(message);
-                      loadPolls();
-                    }}
+                {historyNotice && <p className="mb-3 text-sm text-forest">{historyNotice}</p>}
+                <div className="flex flex-col gap-4">
+                  {polls.length === 0 && <p className="text-sm text-muted">No polls yet.</p>}
+                  {polls.map((poll) =>
+                    editingPollId === poll.id ? (
+                      <PollEditor
+                        key={poll.id}
+                        poll={poll}
+                        imagesSupported={imagesSupported}
+                        durationsSupported={durationsSupported}
+                        onCancel={() => {
+                          setEditingPollId(null);
+                          loadPolls();
+                        }}
+                        onSaved={() => {
+                          setEditingPollId(null);
+                          loadPolls();
+                        }}
+                      />
+                    ) : (
+                      <div key={poll.id} className="border-b border-moss pb-3 last:border-0">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                            {poll.image_url && (
+                              <span className="relative aspect-video w-12 shrink-0 overflow-hidden rounded border border-moss">
+                                <Image src={poll.image_url} alt="" fill sizes="48px" className="object-cover" />
+                              </span>
+                            )}
+                            <p className="text-sm font-semibold text-ink">{poll.question}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs uppercase text-muted">{poll.status}</span>
+                            {poll.status === "scheduled" && (
+                              <button
+                                onClick={() => setOpenNowFor({ kind: "poll", pollId: poll.id })}
+                                disabled={openNowFor?.kind === "poll" && openNowFor.pollId === poll.id}
+                                className="rounded-md border border-forest px-2 py-1 text-xs font-semibold text-forest hover:bg-parchment disabled:opacity-50"
+                              >
+                                Open now
+                              </button>
+                            )}
+                            {poll.status !== "closed" && (
+                              <button
+                                onClick={() => setEditingPollId(poll.id)}
+                                className="rounded-md border border-moss px-2 py-1 text-xs text-forest hover:bg-parchment"
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {poll.repeat_daily && !poll.repeat_paused && (
+                          <p className="mt-1 text-xs font-semibold text-forest">🔁 Repeats daily</p>
+                        )}
+                        {poll.repeat_paused && (
+                          <p className="mt-1 text-xs text-amber">
+                            🔁 Repeating poll paused — a different poll was manually queued for the next
+                            cycle.
+                          </p>
+                        )}
+                        {poll.opened_early && (
+                          <p className="mt-1 text-xs text-amber">
+                            ⚡ Opened early with Open now at {formatEastern(poll.opens_at)} ET
+                          </p>
+                        )}
+                        <PollVisibilityControls
+                          pollId={poll.id}
+                          status={poll.status}
+                          visibility={poll.visibility}
+                          forceShown={poll.force_shown}
+                          supported={hideSupported}
+                          onChanged={(message) => {
+                            setHistoryNotice(message);
+                            loadPolls();
+                          }}
+                        />
+                        {poll.status !== "closed" && (poll.is_long || poll.duration_days) && (
+                          <p className="mt-1 text-xs font-semibold text-forest">⏱ Voting runs {describeDuration(poll)}</p>
+                        )}
+                        {poll.status === "open" && (
+                          <OpenPollControls
+                            poll={poll}
+                            durationsSupported={durationsSupported}
+                            onChanged={(message) => {
+                              setHistoryNotice(message);
+                              loadPolls();
+                            }}
+                          />
+                        )}
+                        {openNowFor?.kind === "poll" && openNowFor.pollId === poll.id && (
+                          <div className="mt-2">
+                            <OpenNowPanel
+                              pollId={poll.id}
+                              onCancel={() => setOpenNowFor(null)}
+                              onOpened={(message) => {
+                                setOpenNowFor(null);
+                                setPollNotice(message);
+                                loadPolls();
+                              }}
+                            />
+                          </div>
+                        )}
+                        <ul className="mt-1 text-sm text-muted">
+                          {poll.options.map((o) => (
+                            <li key={o.option_id}>
+                              {o.label}: {o.vote_count}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </section>
+            </CollapsibleSection>,
+            ],
+          },
+          {
+            id: "events",
+            label: "Events & Announcements",
+            content: [
+              <CollapsibleSection key="Announcements" title="Announcements">
+                <AnnouncementsAdmin />
+              </CollapsibleSection>,
+              <CollapsibleSection key="Suggestion Events" title="Suggestion Events">
+                <SuggestionEventAdmin />
+              </CollapsibleSection>,
+            ],
+          },
+          {
+            id: "stream",
+            label: "Stream",
+            content: [
+              <CollapsibleSection key="Meet the Resident" title="Meet the Resident">
+                <SpeciesAdmin />
+              </CollapsibleSection>,
+            ],
+          },
+          {
+            id: "chat",
+            label: "Chat",
+            content: [
+            <CollapsibleSection key="Chat Moderation" title="Chat Moderation">
+              <section className="rounded-xl border border-moss bg-card p-5 shadow-sm">
+                <h2 className="mb-3 font-heading text-lg font-semibold text-forest">Chat Moderation</h2>
+                <form onSubmit={submitBan} className="mb-4 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    value={banTarget}
+                    onChange={(e) => setBanTarget(e.target.value)}
+                    placeholder="Session ID or IP address"
+                    className="flex-1 rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
                   />
-                )}
-                {openNowFor?.kind === "poll" && openNowFor.pollId === poll.id && (
-                  <div className="mt-2">
-                    <OpenNowPanel
-                      pollId={poll.id}
-                      onCancel={() => setOpenNowFor(null)}
-                      onOpened={(message) => {
-                        setOpenNowFor(null);
-                        setPollNotice(message);
-                        loadPolls();
-                      }}
-                    />
-                  </div>
-                )}
-                <ul className="mt-1 text-sm text-muted">
-                  {poll.options.map((o) => (
-                    <li key={o.option_id}>
-                      {o.label}: {o.vote_count}
-                    </li>
+                  <input
+                    value={banReason}
+                    onChange={(e) => setBanReason(e.target.value)}
+                    placeholder="Reason (optional)"
+                    className="flex-1 rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-md bg-forest px-3 py-2 text-sm font-semibold text-parchment hover:bg-forest-dark"
+                  >
+                    Ban
+                  </button>
+                </form>
+                {banError && <p className="mb-2 text-sm text-amber">{banError}</p>}
+
+                <div className="flex flex-col gap-2">
+                  {bans.length === 0 && <p className="text-sm text-muted">No active bans.</p>}
+                  {bans.map((ban) => (
+                    <div key={ban.id} className="flex items-center justify-between text-sm">
+                      <span>
+                        {ban.session_id ?? ban.ip_address}
+                        {ban.reason && <span className="text-muted"> — {ban.reason}</span>}
+                      </span>
+                      <button
+                        onClick={() => removeBan(ban.id)}
+                        className="rounded-md border border-moss px-2 py-1 text-xs text-muted hover:bg-parchment"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   ))}
-                </ul>
-              </div>
-            ),
-          )}
-        </div>
-      </section>
-
-      <AnnouncementsAdmin />
-
-      <SuggestionEventAdmin />
-
-      <SpeciesAdmin />
-
-      <NotificationCategoriesAdmin />
-      <BroadcastComposer />
-      <SuggestionsAdmin />
-
-      {/* Moderation */}
-      <section className="rounded-xl border border-moss bg-card p-5 shadow-sm">
-        <h2 className="mb-3 font-heading text-lg font-semibold text-forest">Chat Moderation</h2>
-        <form onSubmit={submitBan} className="mb-4 flex flex-col gap-2 sm:flex-row">
-          <input
-            value={banTarget}
-            onChange={(e) => setBanTarget(e.target.value)}
-            placeholder="Session ID or IP address"
-            className="flex-1 rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
-          />
-          <input
-            value={banReason}
-            onChange={(e) => setBanReason(e.target.value)}
-            placeholder="Reason (optional)"
-            className="flex-1 rounded-md border border-moss bg-parchment px-3 py-2 text-sm text-ink outline-none focus:border-forest"
-          />
-          <button
-            type="submit"
-            className="rounded-md bg-forest px-3 py-2 text-sm font-semibold text-parchment hover:bg-forest-dark"
-          >
-            Ban
-          </button>
-        </form>
-        {banError && <p className="mb-2 text-sm text-amber">{banError}</p>}
-
-        <div className="flex flex-col gap-2">
-          {bans.length === 0 && <p className="text-sm text-muted">No active bans.</p>}
-          {bans.map((ban) => (
-            <div key={ban.id} className="flex items-center justify-between text-sm">
-              <span>
-                {ban.session_id ?? ban.ip_address}
-                {ban.reason && <span className="text-muted"> — {ban.reason}</span>}
-              </span>
-              <button
-                onClick={() => removeBan(ban.id)}
-                className="rounded-md border border-moss px-2 py-1 text-xs text-muted hover:bg-parchment"
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
+                </div>
+              </section>
+            </CollapsibleSection>,
+            ],
+          },
+          {
+            id: "email",
+            label: "Email",
+            content: [
+              <CollapsibleSection key="Compose & Send Email" title="Compose & Send Email">
+                <BroadcastComposer />
+              </CollapsibleSection>,
+              <CollapsibleSection key="Notification Categories" title="Notification Categories" defaultOpen={false}>
+                <NotificationCategoriesAdmin />
+              </CollapsibleSection>,
+            ],
+          },
+          // A future "Push" tab goes here, between Email and Inbox.
+          {
+            id: "inbox",
+            label: "Inbox",
+            content: [
+              <CollapsibleSection key="Suggestions" title="Suggestions">
+                <SuggestionsAdmin />
+              </CollapsibleSection>,
+            ],
+          },
+        ]}
+      />
     </div>
   );
 }

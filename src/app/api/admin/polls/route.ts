@@ -10,18 +10,21 @@ import {
 } from "@/lib/pollDuration";
 import { DURATION_COLS, durationColumnsExist, loadPollDuration } from "@/lib/pollTiming";
 import { easternHour, getNextNoon, getPollState, isLongPoll } from "@/lib/pollSchedule";
+import { getPollVisibility, hideColumnsExist, loadAutoHideHours } from "@/lib/pollVisibility";
 
 export async function GET() {
   const supabase = createServiceRoleClient();
 
   // ends_at / open_ended / duration_days exist once supabase/poll_duration.sql has been run.
   const durationsAvailable = await durationColumnsExist(supabase);
+  // hidden_at / force_shown exist once supabase/poll_hide.sql has been run.
+  const hideAvailable = await hideColumnsExist(supabase);
   const { data: pollRows, error } = await supabase
     .from("polls")
     .select(
       `id, question, status, opens_at, closes_at, created_at, repeat_daily, repeat_paused${
         durationsAvailable ? DURATION_COLS : ""
-      }`,
+      }${hideAvailable ? ", hidden_at, force_shown" : ""}`,
     )
     .order("created_at", { ascending: false })
     .limit(20);
@@ -33,7 +36,10 @@ export async function GET() {
     id: string; question: string; status: string; opens_at: string; closes_at: string; created_at: string;
     repeat_daily: boolean; repeat_paused: boolean;
     ends_at?: string | null; open_ended?: boolean | null; duration_days?: number | null;
+    hidden_at?: string | null; force_shown?: boolean | null;
   }[];
+  const autoHide = hideAvailable ? await loadAutoHideHours(supabase) : { supported: false, hours: null };
+  const now = new Date();
 
   const pollIds = polls.map((p) => p.id);
   const { data: results } = await supabase
@@ -55,6 +61,10 @@ export async function GET() {
     voting_end: getPollState(poll).end?.toISOString() ?? null,
     is_long: isLongPoll(poll),
     image_url: pollImageUrl(imagePaths?.get(poll.id) ?? null),
+    // Whether visitors can see it (closed polls can be hidden by hand or by
+    // the auto-hide timer); see src/lib/pollVisibility.ts.
+    visibility: hideAvailable ? getPollVisibility(poll, autoHide.hours, now) : { hidden: false, hideAt: null },
+    force_shown: !!poll.force_shown,
     // The daily open always lands in the noon hour (Eastern). A poll that went
     // live at any other time was started by hand with "Open now".
     opened_early: poll.status !== "scheduled" && easternHour(poll.opens_at) !== 12,
@@ -67,6 +77,8 @@ export async function GET() {
     polls: pollsWithResults,
     imagesSupported: picturesAvailable,
     durationsSupported: durationsAvailable,
+    hideSupported: hideAvailable && autoHide.supported,
+    autoHideHours: autoHide.hours,
   });
 }
 

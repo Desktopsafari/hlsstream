@@ -10,6 +10,7 @@ const COLUMNS = {
   votes: ["id", "poll_id", "option_id", "session_id", "created_at"],
   poll_results: ["poll_id", "option_id", "label", "display_order", "vote_count"],
   announcements: ["id", "stream_id", "title", "message", "image_path", "button_label", "button_kind", "button_target", "is_on", "starts_at", "ends_at", "created_at", "updated_at"],
+  site_settings: ["key", "value", "updated_at"],
   species_cards: ["id", "stream_id", "species_name", "scientific_name", "conservation_status", "photo_path", "range_map_path", "info_blocks", "updated_at"],
 };
 
@@ -17,14 +18,16 @@ const tick = () => new Promise((r) => setImmediate(r));
 
 // announcementsTable: false = supabase/announcements.sql not run yet.
 // namesColumns: false = supabase/species_names.sql not run yet.
-export function createFake({ imageColumn = true, durationColumns = true, announcementsTable = true, namesColumns = true } = {}) {
-  const db = { polls: [], poll_options: [], votes: [], announcements: [], species_cards: [] };
+// hideColumns: false = supabase/poll_hide.sql not run yet (no hidden_at /
+// force_shown columns and no site_settings table).
+export function createFake({ imageColumn = true, durationColumns = true, announcementsTable = true, namesColumns = true, hideColumns = true } = {}) {
+  const db = { polls: [], poll_options: [], votes: [], announcements: [], species_cards: [], site_settings: [] };
   const files = new Map(); // `${bucket}/${path}` -> { created_at, size }
   const log = [];
 
   const cols = (table) =>
     table === "species_cards" ? [...COLUMNS.species_cards, ...(namesColumns ? ["names_heading", "names"] : [])] :
-    table === "polls" ? [...COLUMNS.polls, ...(imageColumn ? ["image_path"] : []), ...(durationColumns ? ["ends_at", "open_ended", "duration_days"] : [])] : COLUMNS[table];
+    table === "polls" ? [...COLUMNS.polls, ...(imageColumn ? ["image_path"] : []), ...(durationColumns ? ["ends_at", "open_ended", "duration_days"] : []), ...(hideColumns ? ["hidden_at", "force_shown"] : [])] : COLUMNS[table];
 
   const missing = (col) => ({ code: "42703", message: `column ${col} does not exist` });
 
@@ -70,6 +73,7 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
     update(p) { this.op = "update"; this.payload = p; return this; }
     delete() { this.op = "delete"; return this; }
     eq(c, v) { this.filters.push((r) => r[c] === v); this.filterCols = [...(this.filterCols ?? []), c]; return this; }
+    is(c, v) { this.filters.push((r) => (r[c] ?? null) === v); this.filterCols = [...(this.filterCols ?? []), c]; return this; }
     neq(c, v) { this.filters.push((r) => r[c] !== v); return this; }
     lt(c, v) { this.filters.push((r) => r[c] < v); return this; }
     lte(c, v) { this.filters.push((r) => r[c] <= v); return this; }
@@ -90,6 +94,9 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
 
     async run() {
       await tick();
+      if (this.table === "site_settings" && !hideColumns) {
+        return { data: null, error: { code: "PGRST205", message: "Could not find the table 'public.site_settings' in the schema cache" } };
+      }
       if (this.table === "announcements" && !announcementsTable) {
         return { data: null, error: { code: "PGRST205", message: "Could not find the table 'public.announcements' in the schema cache" } };
       }
@@ -107,7 +114,7 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
       let result;
       if (this.op === "upsert") {
         const list = Array.isArray(this.payload) ? this.payload : [this.payload];
-        for (const p of list) { const row = db[this.table].find((r) => r[this.onConflict] === p[this.onConflict]); if (row) Object.assign(row, p); }
+        for (const p of list) { const row = db[this.table].find((r) => r[this.onConflict] === p[this.onConflict]); if (row) Object.assign(row, p); else if (this.table === "site_settings") db[this.table].push({ ...p }); }
         return { data: null, error: null };
       }
       if (this.op === "insert") {
@@ -117,6 +124,7 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
           if (this.table === "polls") Object.assign(base, { status: "scheduled", repeat_daily: false, repeat_paused: false });
           if (this.table === "polls" && imageColumn) base.image_path = null;
           if (this.table === "polls" && durationColumns) Object.assign(base, { ends_at: null, open_ended: false, duration_days: null });
+          if (this.table === "polls" && hideColumns) Object.assign(base, { hidden_at: null, force_shown: false });
           if (this.table === "announcements") Object.assign(base, { stream_id: "main", message: "", image_path: null, button_label: null, button_kind: null, button_target: null, is_on: false, starts_at: null, ends_at: null, updated_at: base.created_at });
           return { ...base, ...p };
         });
@@ -207,7 +215,7 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
     addPoll(p = {}) {
       const row = {
         id: randomUUID(), question: "TEST poll", status: "scheduled", repeat_daily: false, repeat_paused: false,
-        opens_at: new Date().toISOString(), closes_at: new Date().toISOString(), created_at: new Date().toISOString(), ...(imageColumn ? { image_path: null } : {}), ...(durationColumns ? { ends_at: null, open_ended: false, duration_days: null } : {}), ...p,
+        opens_at: new Date().toISOString(), closes_at: new Date().toISOString(), created_at: new Date().toISOString(), ...(imageColumn ? { image_path: null } : {}), ...(durationColumns ? { ends_at: null, open_ended: false, duration_days: null } : {}), ...(hideColumns ? { hidden_at: null, force_shown: false } : {}), ...p,
       };
       if (row.image_path) files.set(`event-images/${row.image_path}`, { created_at: new Date().toISOString(), size: 1 });
       db.polls.push(row);

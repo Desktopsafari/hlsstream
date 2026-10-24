@@ -1,44 +1,24 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { getPollState, type PollTiming } from "@/lib/pollSchedule";
-import { timingSelect } from "@/lib/pollTiming";
+import { getPollState } from "@/lib/pollSchedule";
 import { loadPollImagePaths, pollImageUrl } from "@/lib/pollImages";
+import { getPublicPoll } from "@/lib/pollVisibility";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const sessionId = searchParams.get("sessionId");
 
   const supabase = createServiceRoleClient();
-  // ends_at / open_ended exist once supabase/poll_duration.sql has been run.
-  const timing = await timingSelect(supabase);
 
   // Prefer the currently open poll; otherwise show the most recently
-  // closed one (so results stay visible until the next poll opens).
-  const { data: openPollRow } = await supabase
-    .from("polls")
-    .select(`id, question, status, opens_at, closes_at${timing}`)
-    .eq("status", "open")
-    .order("opens_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  type PollRow = { id: string; question: string; status: string; opens_at: string; closes_at: string } & PollTiming;
-  const openPoll = openPollRow as unknown as PollRow | null;
-
-  const poll =
-    openPoll ??
-    ((
-      await supabase
-        .from("polls")
-        .select(`id, question, status, opens_at, closes_at${timing}`)
-        .eq("status", "closed")
-        .order("closes_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    ).data as unknown as PollRow | null);
+  // closed one (so results stay visible until the next poll opens) -- unless
+  // it's hidden from the site, by hand or by the auto-hide timer. A hidden
+  // poll's content is never sent.
+  const { poll, hideAt } = await getPublicPoll(supabase);
+  const serverTime = new Date().toISOString();
 
   if (!poll) {
-    return NextResponse.json({ poll: null });
+    return NextResponse.json({ poll: null, serverTime });
   }
 
   // Report an open poll as closed once its end has passed (8pm for a normal
@@ -81,5 +61,9 @@ export async function GET(request: Request) {
     options: options ?? [],
     hasVoted,
     votedOptionId,
+    // When the auto-hide timer will hide this (closed) poll, so an open page
+    // can take the card away on time. Null = it won't hide by itself.
+    hideAt: hideAt?.toISOString() ?? null,
+    serverTime,
   });
 }

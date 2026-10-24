@@ -8,6 +8,7 @@ import OpenNowPanel from "./OpenNowPanel";
 import PollImageField from "./PollImageField";
 import DurationField, { DEFAULT_DURATION, toDurationInput, type DurationValue } from "./DurationField";
 import OpenPollControls from "./OpenPollControls";
+import { AutoHideSetting, PollVisibilityControls, type AdminPollVisibility } from "./PollVisibilityControls";
 import { cutoffLabel, formatEasternDate } from "@/lib/pollSchedule";
 import SpeciesAdmin from "./SpeciesAdmin";
 import SuggestionEventAdmin from "./SuggestionEventAdmin";
@@ -41,6 +42,9 @@ type Poll = {
   duration_days: number | null;
   voting_end: string | null; // for an open poll: when voting ends, null = no end
   is_long: boolean;
+  // Whether visitors can see it (see src/lib/pollVisibility.ts).
+  visibility: AdminPollVisibility;
+  force_shown: boolean;
 };
 
 // "Today only" / "3 days from when it opens" / "until Sun, Oct 18, 8:00 PM ET" / "until closed".
@@ -81,6 +85,8 @@ export default function AdminDashboard() {
   const [repeatDaily, setRepeatDaily] = useState(false);
   const [duration, setDuration] = useState<DurationValue>(DEFAULT_DURATION);
   const [durationsSupported, setDurationsSupported] = useState(false);
+  const [hideSupported, setHideSupported] = useState(true);
+  const [autoHideHours, setAutoHideHours] = useState<number | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
   const [pollNotice, setPollNotice] = useState<string | null>(null);
   const [historyNotice, setHistoryNotice] = useState<string | null>(null);
@@ -102,6 +108,8 @@ export default function AdminDashboard() {
       setPolls(data.polls);
       setImagesSupported(data.imagesSupported === true);
       setDurationsSupported(data.durationsSupported === true);
+      setHideSupported(data.hideSupported === true);
+      setAutoHideHours(data.autoHideHours ?? null);
     }
   }
 
@@ -360,6 +368,14 @@ export default function AdminDashboard() {
       {/* Poll history */}
       <section className="rounded-xl border border-moss bg-card p-5 shadow-sm">
         <h2 className="mb-3 font-heading text-lg font-semibold text-forest">Poll History</h2>
+        <AutoHideSetting
+          supported={hideSupported}
+          hours={autoHideHours}
+          onChanged={(message) => {
+            setHistoryNotice(message);
+            loadPolls();
+          }}
+        />
         {historyNotice && <p className="mb-3 text-sm text-forest">{historyNotice}</p>}
         <div className="flex flex-col gap-4">
           {polls.length === 0 && <p className="text-sm text-muted">No polls yet.</p>}
@@ -425,6 +441,17 @@ export default function AdminDashboard() {
                     ⚡ Opened early with Open now at {formatEastern(poll.opens_at)} ET
                   </p>
                 )}
+                <PollVisibilityControls
+                  pollId={poll.id}
+                  status={poll.status}
+                  visibility={poll.visibility}
+                  forceShown={poll.force_shown}
+                  supported={hideSupported}
+                  onChanged={(message) => {
+                    setHistoryNotice(message);
+                    loadPolls();
+                  }}
+                />
                 {poll.status !== "closed" && (poll.is_long || poll.duration_days) && (
                   <p className="mt-1 text-xs font-semibold text-forest">⏱ Voting runs {describeDuration(poll)}</p>
                 )}

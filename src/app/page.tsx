@@ -1,6 +1,6 @@
 import HlsPlayer from "@/components/player/HlsPlayer";
 import ChatPanel from "@/components/chat/ChatPanel";
-import PollCard from "@/components/poll/PollCard";
+import PollSection from "@/components/poll/PollSection";
 import SpeciesCard from "@/components/species/SpeciesCard";
 import ViewerCount from "@/components/viewers/ViewerCount";
 import NotifyMe from "@/components/notify/NotifyMe";
@@ -8,7 +8,6 @@ import SuggestionEventCard from "@/components/event/SuggestionEventCard";
 import Card from "@/components/ui/Card";
 import Announcements from "@/components/announcement/Announcements";
 import PollAnchorScroll from "@/components/announcement/PollAnchorScroll";
-import { POLL_ANCHOR_ID } from "@/lib/announcementLinks";
 import { SITE_NAME } from "@/config/constants";
 
 export default function HomePage() {
@@ -60,9 +59,15 @@ export default function HomePage() {
 
           <SuggestionEventCard />
 
-          <Card id={POLL_ANCHOR_ID} title="Today's Vote" className="order-3 self-start lg:order-none lg:self-auto">
-            <PollCard />
-          </Card>
+          {/*
+            "Today's Vote" (id `todays-vote`, order-3 on phones). Renders nothing
+            at all when there's no poll to show -- none exists, or the latest
+            closed one is hidden from the site -- so no gap is left: on
+            phones the chat card is then last, and on desktop the left column
+            just ends earlier. The chat card's height formula doesn't involve
+            this card.
+          */}
+          <PollSection />
         </div>
 
         <div className="contents lg:flex lg:flex-col lg:gap-8">

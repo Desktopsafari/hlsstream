@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Card from "@/components/ui/Card";
+import { POLL_ANCHOR_ID } from "@/lib/announcementLinks";
 import { POLL_REFRESH_INTERVAL_MS } from "@/config/constants";
 import { publicDeadline } from "@/lib/pollDuration";
 import { getSessionId } from "@/lib/session";
@@ -52,13 +54,24 @@ type PollResponse = {
   options: PollOption[];
   hasVoted: boolean;
   votedOptionId: string | null;
+  // When the auto-hide timer takes a closed poll off the site (null = never).
+  hideAt?: string | null;
+  serverTime?: string;
 };
 
-export default function PollCard() {
-  const [data, setData] = useState<PollResponse | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
+// The whole "Today's Vote" card. It renders nothing at all (no card, no
+// spacing) when there is no poll to show -- none exists, or the latest closed
+// one is hidden from the site. initialVisible comes from the server so a
+// hidden poll's card never flashes up before the first fetch; until that
+// fetch the card looks exactly as it always has.
+export default function PollCard({ initialVisible = true }: { initialVisible?: boolean }) {
+  const [data, setData] = useState<PollResponse | null>(null);
+  const clockSkewMs = useRef(0);
+
+  // Lives here, not in the card body, so it keeps running while the card is
+  // hidden and the next poll appears on its own.
   async function load() {
     const sessionId = getSessionId();
     const res = await fetch(`/api/poll?sessionId=${sessionId}`);
@@ -72,6 +85,37 @@ export default function PollCard() {
     const interval = setInterval(load, POLL_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (data?.serverTime) clockSkewMs.current = Date.parse(data.serverTime) - Date.now();
+  }, [data]);
+
+  // Take the card away the moment the auto-hide time passes, even if this tab
+  // has been open a long time (a hide by hand shows on the next refresh).
+  useEffect(() => {
+    if (!data?.poll || !data.hideAt) return;
+    const remaining = Date.parse(data.hideAt) - (Date.now() + clockSkewMs.current);
+    const hide = () => setData((d) => (d ? { ...d, poll: null, hideAt: null } : d));
+    if (remaining <= 0) {
+      hide();
+      return;
+    }
+    const timer = setTimeout(hide, Math.min(remaining, MAX_TIMEOUT_MS));
+    return () => clearTimeout(timer);
+  }, [data]);
+
+  if (data ? !data.poll : !initialVisible) return null;
+
+  return (
+    <Card id={POLL_ANCHOR_ID} title="Today's Vote" className="order-3 self-start lg:order-none lg:self-auto">
+      <PollBody data={data} load={load} />
+    </Card>
+  );
+}
+
+function PollBody({ data, load }: { data: PollResponse | null; load: () => void }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function vote(optionId: string) {
     if (!data?.poll) return;

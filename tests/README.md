@@ -50,6 +50,7 @@ If you ever want to test against a real database, do not add it here.
 | `unlink.test.mjs` | votes unlinked from browser ids about 7 days after the real close |
 | `announcements.test.mjs` | announcement cards: start/end/switch visibility from the clock, Eastern times across the clock change, the 3-card cap (newest first), validation, button links (poll anchor, internal paths, https only; javascript: and other schemes refused), picture uploads (validation, replace, remove, shared files, pending uploads), working without the table |
 | `species-names.test.mjs` | the species card names block: one name per line, blank lines and spaces dropped, heading default and limits, 12-name cap, working without the columns |
+| `poll-hide.test.mjs` | hiding closed polls: Hide/Show on site (double clicks, open/queued polls refused, nothing deleted), auto-hide at every threshold from the real close time (daily, multi-day, Close now, ended-but-not-flipped), Show overriding the timer, the next poll showing, the results email still sent once, the public API not leaking a hidden poll, working without the SQL |
 
 ## Scripts
 

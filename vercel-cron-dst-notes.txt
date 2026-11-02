@@ -6,21 +6,22 @@ Cron only understands UTC, but "noon Eastern" / "8pm Eastern" shifts
 between EDT (UTC-4, summer) and EST (UTC-5, winter) -- so the schedule
 below needs a one-line edit twice a year, right when US clocks change.
 
-CURRENT SETTING (in vercel.json right now) -- correct for EDT:
-  open-poll:  "0 16 * * *"   (16:00 UTC = 12:00pm EDT)
-  close-poll: "0 0 * * *"    (00:00 UTC = 8:00pm EDT, same UTC day)
-
-WHEN CLOCKS "FALL BACK" (DST ends, switch to EST) -- add 1 hour to both:
+CURRENT SETTING (in vercel.json right now) -- correct for EST (winter):
   open-poll:  "0 17 * * *"   (17:00 UTC = 12:00pm EST)
   close-poll: "0 1 * * *"    (01:00 UTC = 8:00pm EST)
 
-WHEN CLOCKS "SPRING FORWARD" (DST starts, switch back to EDT) -- subtract
-1 hour from both, back to the CURRENT SETTING above.
+NEXT CHANGE: 2027-03-14, when clocks "spring forward" (DST starts, switch
+to EDT) -- subtract 1 hour from both:
+  open-poll:  "0 16 * * *"   (16:00 UTC = 12:00pm EDT)
+  close-poll: "0 0 * * *"    (00:00 UTC = 8:00pm EDT, same UTC day)
+
+WHEN CLOCKS "FALL BACK" again (DST ends, switch to EST) -- add 1 hour to
+both, back to the CURRENT SETTING above.
 
 EXACT DATES TO MAKE THE CHANGE (US DST rules: starts 2nd Sunday of March,
 ends 1st Sunday of November):
 
-  2026-11-01  -> switch to EST times (17:00 / 01:00)
+  2026-11-01  -> switch to EST times (17:00 / 01:00)   [done]
   2027-03-14  -> switch back to EDT times (16:00 / 00:00)
   2027-11-07  -> switch to EST times (17:00 / 01:00)
   2028-03-12  -> switch back to EDT times (16:00 / 00:00)

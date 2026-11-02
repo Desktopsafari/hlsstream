@@ -19,6 +19,7 @@ import SuggestionsAdmin from "./SuggestionsAdmin";
 import AdminTabs from "./AdminTabs";
 import CollapsibleSection from "./CollapsibleSection";
 import LiveNowStrip from "./LiveNowStrip";
+import PushAdmin from "./PushAdmin";
 
 type PollOptionResult = {
   option_id: string;
@@ -591,7 +592,11 @@ export default function AdminDashboard() {
               </CollapsibleSection>,
             ],
           },
-          // A future "Push" tab goes here, between Email and Inbox.
+          {
+            id: "push",
+            label: "Push",
+            content: [<PushAdmin key="Push" />],
+          },
           {
             id: "inbox",
             label: "Inbox",

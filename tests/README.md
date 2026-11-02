@@ -18,7 +18,9 @@ Read this before changing anything here.
 - The loader (`support/hooks.mjs`) swaps `src/lib/supabase/server.ts` and
   `src/lib/email.ts` for those fakes **unconditionally**. There is no setting that
   switches the real Supabase, Supabase Storage or Resend back on, so a test cannot
-  read or change real polls, votes, pictures or send a real email.
+  read or change real polls, votes, pictures or send a real email. The `web-push` package is
+  swapped the same way (`support/stub-web-push.mjs` records notifications instead of sending
+  them), so no test can reach a real push service.
 - `support/register.mjs` also overwrites the Supabase environment variables with
   obviously fake values and removes `RESEND_API_KEY`, as a second safety net.
 - All polls, options, votes, announcements and species cards in the tests are made-up ("TEST ...") and live in memory
@@ -50,6 +52,7 @@ If you ever want to test against a real database, do not add it here.
 | `unlink.test.mjs` | votes unlinked from browser ids about 7 days after the real close |
 | `announcements.test.mjs` | announcement cards: start/end/switch visibility from the clock, Eastern times across the clock change, the 3-card cap (newest first), validation, button links (poll anchor, internal paths, https only; javascript: and other schemes refused), picture uploads (validation, replace, remove, shared files, pending uploads), working without the table |
 | `species-names.test.mjs` | the species card names block: one name per line, blank lines and spaces dropped, heading default and limits, 12-name cap, working without the columns |
+| `push.test.mjs` | push notifications: subscribe / change categories / unsubscribe (only endpoint, keys and categories stored), bad endpoints refused, the "push" rate limit, send now (category, 2-hour TTL, 410/404 deleted, 5 failures in a row deleted), title/message/link limits, test send, scheduled sends, repeating sends (Skip today + undo, Active, days of week, once a day, clock change), the 30-minute missed window, two overlapping pings sending once, the pause switch, the cron secret and the one-query idle check, admin routes refusing without login, RLS with no public access, working before the SQL is run or without keys |
 | `poll-hide.test.mjs` | hiding closed polls: Hide/Show on site (double clicks, open/queued polls refused, nothing deleted), auto-hide at every threshold from the real close time (daily, multi-day, Close now, ended-but-not-flipped), Show overriding the timer, the next poll showing, the results email still sent once, the public API not leaking a hidden poll, working without the SQL |
 
 ## Scripts

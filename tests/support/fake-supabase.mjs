@@ -12,6 +12,25 @@ const COLUMNS = {
   announcements: ["id", "stream_id", "title", "message", "image_path", "button_label", "button_kind", "button_target", "is_on", "starts_at", "ends_at", "created_at", "updated_at"],
   site_settings: ["key", "value", "updated_at"],
   species_cards: ["id", "stream_id", "species_name", "scientific_name", "conservation_status", "photo_path", "range_map_path", "info_blocks", "updated_at"],
+  contact_form_attempts: ["id", "ip_address", "form", "created_at"],
+  // supabase/push_notifications.sql
+  push_categories: ["id", "stream_id", "name", "display_order", "is_active", "created_at"],
+  push_subscriptions: ["id", "stream_id", "endpoint", "p256dh", "auth", "category_ids", "created_at", "last_success_at", "failure_count"],
+  push_sends: ["id", "title", "message", "url", "category_id", "category_name", "source", "status", "recipients", "sent", "failed", "created_at"],
+  push_scheduled: ["id", "stream_id", "title", "message", "url", "category_id", "send_at", "status", "claimed_at", "created_at"],
+  push_repeating: ["id", "stream_id", "title", "message", "url", "category_id", "time_of_day", "days_of_week", "is_active", "skip_date", "last_sent_date", "next_send_at", "created_at", "updated_at"],
+  push_settings: ["stream_id", "paused", "updated_at"],
+  push_due: ["kind", "id", "stream_id", "due_at"],
+};
+
+// Defaults the real push tables fill in on insert.
+const PUSH_DEFAULTS = {
+  push_categories: () => ({ stream_id: "main", display_order: 0, is_active: true }),
+  push_subscriptions: () => ({ stream_id: "main", category_ids: [], last_success_at: null, failure_count: 0 }),
+  push_sends: () => ({ message: "", url: "/", category_id: null, category_name: null, status: "sent", recipients: 0, sent: 0, failed: 0 }),
+  push_scheduled: () => ({ stream_id: "main", url: "/", status: "pending", claimed_at: null }),
+  push_repeating: () => ({ stream_id: "main", url: "/", days_of_week: [0, 1, 2, 3, 4, 5, 6], is_active: true, skip_date: null, last_sent_date: null, next_send_at: null, updated_at: new Date().toISOString() }),
+  push_settings: () => ({ paused: false, updated_at: new Date().toISOString() }),
 };
 
 const tick = () => new Promise((r) => setImmediate(r));
@@ -20,8 +39,13 @@ const tick = () => new Promise((r) => setImmediate(r));
 // namesColumns: false = supabase/species_names.sql not run yet.
 // hideColumns: false = supabase/poll_hide.sql not run yet (no hidden_at /
 // force_shown columns and no site_settings table).
-export function createFake({ imageColumn = true, durationColumns = true, announcementsTable = true, namesColumns = true, hideColumns = true } = {}) {
-  const db = { polls: [], poll_options: [], votes: [], announcements: [], species_cards: [], site_settings: [] };
+// pushTables: false = supabase/push_notifications.sql not run yet.
+export function createFake({ imageColumn = true, durationColumns = true, announcementsTable = true, namesColumns = true, hideColumns = true, pushTables = true } = {}) {
+  const db = {
+    polls: [], poll_options: [], votes: [], announcements: [], species_cards: [], site_settings: [], contact_form_attempts: [],
+    push_categories: [], push_subscriptions: [], push_sends: [], push_scheduled: [], push_repeating: [], push_settings: [],
+  };
+  const queries = []; // every table/view touched, in order (for "one small query when idle")
   const files = new Map(); // `${bucket}/${path}` -> { created_at, size }
   const log = [];
 
@@ -32,6 +56,12 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
   const missing = (col) => ({ code: "42703", message: `column ${col} does not exist` });
 
   function rowsOf(table) {
+    if (table === "push_due") {
+      return [
+        ...db.push_scheduled.filter((s) => s.status === "pending").map((s) => ({ kind: "scheduled", id: s.id, stream_id: s.stream_id, due_at: s.send_at })),
+        ...db.push_repeating.filter((r) => r.is_active && r.next_send_at).map((r) => ({ kind: "repeating", id: r.id, stream_id: r.stream_id, due_at: r.next_send_at })),
+      ];
+    }
     if (table === "poll_results") {
       return db.poll_options.map((o) => ({
         poll_id: o.poll_id,
@@ -77,6 +107,8 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
     neq(c, v) { this.filters.push((r) => r[c] !== v); return this; }
     lt(c, v) { this.filters.push((r) => r[c] < v); return this; }
     lte(c, v) { this.filters.push((r) => r[c] <= v); return this; }
+    gt(c, v) { this.filters.push((r) => r[c] > v); return this; }
+    gte(c, v) { this.filters.push((r) => r[c] >= v); return this; }
     not(c, op, v) { if (op === "like") { const pre = v.replace(/%$/, ""); this.filters.push((r) => !String(r[c]).startsWith(pre)); } return this; }
     upsert(p, opts = {}) { this.op = "upsert"; this.payload = p; this.onConflict = opts.onConflict; return this; }
     in(c, vs) { this.filters.push((r) => vs.includes(r[c])); this.filterCols = [...(this.filterCols ?? []), c]; return this; }
@@ -97,6 +129,9 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
       if (this.table === "site_settings" && !hideColumns) {
         return { data: null, error: { code: "PGRST205", message: "Could not find the table 'public.site_settings' in the schema cache" } };
       }
+      if (this.table.startsWith("push_") && !pushTables) {
+        return { data: null, error: { code: "PGRST205", message: `Could not find the table 'public.${this.table}' in the schema cache` } };
+      }
       if (this.table === "announcements" && !announcementsTable) {
         return { data: null, error: { code: "PGRST205", message: "Could not find the table 'public.announcements' in the schema cache" } };
       }
@@ -114,7 +149,12 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
       let result;
       if (this.op === "upsert") {
         const list = Array.isArray(this.payload) ? this.payload : [this.payload];
-        for (const p of list) { const row = db[this.table].find((r) => r[this.onConflict] === p[this.onConflict]); if (row) Object.assign(row, p); else if (this.table === "site_settings") db[this.table].push({ ...p }); }
+        for (const p of list) {
+          const row = db[this.table].find((r) => r[this.onConflict] === p[this.onConflict]);
+          if (row) Object.assign(row, p);
+          else if (this.table === "site_settings") db[this.table].push({ ...p });
+          else if (PUSH_DEFAULTS[this.table]) db[this.table].push({ id: randomUUID(), created_at: new Date().toISOString(), ...PUSH_DEFAULTS[this.table](), ...p });
+        }
         return { data: null, error: null };
       }
       if (this.op === "insert") {
@@ -125,6 +165,7 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
           if (this.table === "polls" && imageColumn) base.image_path = null;
           if (this.table === "polls" && durationColumns) Object.assign(base, { ends_at: null, open_ended: false, duration_days: null });
           if (this.table === "polls" && hideColumns) Object.assign(base, { hidden_at: null, force_shown: false });
+          if (PUSH_DEFAULTS[this.table]) Object.assign(base, PUSH_DEFAULTS[this.table]());
           if (this.table === "announcements") Object.assign(base, { stream_id: "main", message: "", image_path: null, button_label: null, button_kind: null, button_target: null, is_on: false, starts_at: null, ends_at: null, updated_at: base.created_at });
           return { ...base, ...p };
         });
@@ -208,8 +249,8 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
   };
 
   return {
-    db, files, log, storage,
-    from: (table) => new Query(table),
+    db, files, log, storage, queries,
+    from: (table) => { queries.push(table); return new Query(table); },
     fileExists: (bucket, path) => files.has(`${bucket}/${path}`),
     // helpers for the tests
     addPoll(p = {}) {
@@ -243,6 +284,19 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
         ...(namesColumns ? { names_heading: "Frog names", names: [] } : {}), ...c,
       };
       db.species_cards.push(row);
+      return row;
+    },
+    addPushCategory(name, c = {}) {
+      const row = { id: randomUUID(), stream_id: "main", name, display_order: db.push_categories.length + 1, is_active: true, created_at: new Date().toISOString(), ...c };
+      db.push_categories.push(row);
+      return row;
+    },
+    addPushSubscription(endpoint, categoryIds, s = {}) {
+      const row = {
+        id: randomUUID(), stream_id: "main", endpoint, p256dh: "B".repeat(87), auth: "A".repeat(22), category_ids: categoryIds,
+        created_at: new Date().toISOString(), last_success_at: null, failure_count: 0, ...s,
+      };
+      db.push_subscriptions.push(row);
       return row;
     },
     addVote(pollId, optionId, session = randomUUID()) {

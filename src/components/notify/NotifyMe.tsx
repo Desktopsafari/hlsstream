@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import SubscribeForm from "@/components/contact/SubscribeForm";
+import PushNotify from "./PushNotify";
 
 // "Notify me" button under the video. Opens the same Stay Notified signup the
-// Contact page uses in a modal, so the visitor never leaves the stream. This
+// Contact page uses in a modal, so the visitor never leaves the stream, plus
+// phone/browser push notifications when they're set up (PushNotify). This
 // component owns its own state and sits beside the player and chat, so
 // opening it re-renders neither of them.
 export default function NotifyMe() {
@@ -75,7 +77,10 @@ export default function NotifyMe() {
             onClick={(e) => e.stopPropagation()}
             className="relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl shadow-2xl outline-none"
           >
-            <SubscribeForm />
+            <div className="flex flex-col gap-3">
+              <SubscribeForm />
+              <PushNotify />
+            </div>
             <button
               type="button"
               onClick={close}

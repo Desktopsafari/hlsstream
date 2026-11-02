@@ -11,20 +11,22 @@
     "lint": "tsc --noEmit --noUnusedLocals --noUnusedParameters"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.116.0",
+    "hls.js": "1.7.3",
     "next": "16.3.5",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "hls.js": "1.7.3",
-    "@supabase/supabase-js": "2.116.0",
+    "resend": "6.28.1",
     "socket.io-client": "4.8.3",
-    "resend": "6.28.1"
+    "web-push": "3.6.7"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "3.6.4",
     "tailwindcss": "^4",
-    "@tailwindcss/postcss": "^4"
+    "typescript": "^5"
   }
 }

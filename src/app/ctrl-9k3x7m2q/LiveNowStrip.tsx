@@ -20,6 +20,7 @@ type Snapshot = {
   events: StripEvent[] | null;
   announcements: StripAnnouncement[] | null;
   announcementsSupported: boolean;
+  push: { supported: boolean; paused?: boolean; next?: string | null } | null;
 };
 
 async function getJson(url: string) {
@@ -43,16 +44,18 @@ export default function LiveNowStrip() {
 
   const load = useCallback(async () => {
     setBusy(true);
-    const [polls, events, announcements] = await Promise.all([
+    const [polls, events, announcements, push] = await Promise.all([
       getJson("/api/admin/polls"),
       getJson("/api/admin/suggestion-events"),
       getJson("/api/admin/announcements"),
+      getJson("/api/admin/push"),
     ]);
     setSnap({
       polls: polls?.polls ?? null,
       events: events?.events ?? null,
       announcements: announcements?.announcements ?? null,
       announcementsSupported: announcements?.supported !== false,
+      push,
     });
     setBusy(false);
   }, []);
@@ -109,6 +112,16 @@ export default function LiveNowStrip() {
       const waiting = snap.announcements.filter((a) => a.status.kind === "waiting").length;
       items.push({ label: "Announcements", text: `${showing} showing` });
       if (waiting > 0) paused.push(`${waiting} announcement${waiting === 1 ? "" : "s"} waiting (3-card limit)`);
+    }
+
+    // Push notifications
+    if (!snap.push) {
+      items.push({ label: "Push", text: "couldn't load" });
+    } else if (!snap.push.supported) {
+      items.push({ label: "Push", text: "not set up" });
+    } else {
+      items.push({ label: "Push", text: snap.push.next ? `next ${snap.push.next}` : "nothing scheduled" });
+      if (snap.push.paused) paused.push("all push sending");
     }
   }
 

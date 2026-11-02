@@ -8,7 +8,7 @@ export const metadata = {
 
 // Keep this page accurate: any change that collects, stores, shares, or keeps
 // visitor data differently must update it in the same change (see AGENTS.md).
-const LAST_UPDATED = "October 12, 2026";
+const LAST_UPDATED = "November 2, 2026";
 const OWNER = "DesktopSafari";
 const CONTACT_EMAIL = "desktopsafari@gmail.com";
 
@@ -34,6 +34,11 @@ export default function PrivacyPage() {
           <li>
             Your email address is only used if you sign up for updates (including the support-page
             notice), and every update has an unsubscribe link.
+          </li>
+          <li>
+            If you turn on phone or browser notifications, we store only your device&rsquo;s push
+            address and the categories you chose, never your name or email. You can turn them off
+            any time.
           </li>
           <li>
             Our server keeps ordinary access logs (including IP addresses) for about a week.
@@ -103,6 +108,17 @@ export default function PrivacyPage() {
           support page. Every email has an unsubscribe link; unsubscribing stops the emails, and
           you can email us to have the address removed completely.
         </p>
+        <p id="push-notifications" className="scroll-mt-6">
+          <strong>Phone and browser notifications.</strong> If you choose &ldquo;Turn on
+          notifications&rdquo; in the &ldquo;Notify me&rdquo; window, your browser creates a push
+          subscription for this site. We store that subscription&rsquo;s push address (a web
+          address at your browser maker&rsquo;s push service), the two keys that let us send to
+          it, the categories you chose, when it was created, when a notification last reached it,
+          and a count of failed sends in a row. We don&rsquo;t store your name, email or browser ID
+          with it. Your browser only asks for permission when you click the button. To turn
+          notifications off, use &ldquo;Turn off&rdquo; in the same window, or block notifications
+          for this site in your browser or phone settings.
+        </p>
         <p>
           <strong>The contact box.</strong> If you send a suggestion, we store the text of your
           message. We don&rsquo;t ask for your name or email, so only include what you are happy
@@ -116,7 +132,8 @@ export default function PrivacyPage() {
         </p>
         <p>
           <strong>Spam protection.</strong> To stop the forms being flooded, we keep a short
-          record of your IP address, which form was used, and when. Forms also contain a hidden
+          record of your IP address, which form was used (turning notifications on or off, or
+          changing them, counts too), and when. Forms also contain a hidden
           field that people never see; automated programs often fill it in, and those submissions
           are quietly dropped.
         </p>
@@ -152,6 +169,13 @@ export default function PrivacyPage() {
           <li>
             <strong>Google (Gmail)</strong> receives the contact-box messages and poll results
             that are emailed to us. Poll results contain only totals.
+          </li>
+          <li>
+            <strong>Browser push services</strong> deliver phone and browser notifications if you
+            turn them on. Which one depends on your device and browser: Google (Chrome and
+            Android), Apple (Safari, iPhone and iPad), Mozilla (Firefox) or Microsoft (Edge). Each
+            notification passes through that service, which sees the push address and when we
+            send; the text itself is encrypted so only your device can read it.
           </li>
           <li>
             <strong>GoDaddy</strong> is where the site&rsquo;s domain name is registered and its
@@ -203,6 +227,16 @@ export default function PrivacyPage() {
                 </td>
               </tr>
               <tr className="border-b border-moss">
+                <td className="px-3 py-2">
+                  Notification subscription (push address, keys and chosen categories)
+                </td>
+                <td className="px-3 py-2">
+                  Until you turn notifications off, or the subscription expires or stops working
+                  (deleted as soon as the push service says it&rsquo;s gone, or after 5 failed
+                  sends in a row)
+                </td>
+              </tr>
+              <tr className="border-b border-moss">
                 <td className="px-3 py-2">Contact-box messages</td>
                 <td className="px-3 py-2">Until we delete them</td>
               </tr>
@@ -249,6 +283,12 @@ export default function PrivacyPage() {
           </li>
         </LegalList>
         <p>
+          If you turn on notifications, your browser also keeps this site&rsquo;s small
+          notification helper (a &ldquo;service worker&rdquo;, used only to show notifications; it
+          doesn&rsquo;t store pages or data) and the push subscription. Turning notifications off
+          removes the subscription.
+        </p>
+        <p>
           Nothing else is stored. (The site&rsquo;s administrator, and only the administrator,
           gets a login cookie after signing in.) You can clear this any time in your browser
           settings; the next visit will create a new random ID.
@@ -261,6 +301,12 @@ export default function PrivacyPage() {
           <li>
             Every update email has an unsubscribe link. To have your address removed completely,
             email us.
+          </li>
+          <li>
+            Phone and browser notifications are off unless you turn them on. Turn them off with
+            &ldquo;Turn off&rdquo; in the &ldquo;Notify me&rdquo; window (we delete the
+            subscription at once), or in your browser or phone settings (we delete it the next
+            time a send to it fails).
           </li>
           <li>
             You can ask us to delete your chat messages. Tell us your chat name and roughly when

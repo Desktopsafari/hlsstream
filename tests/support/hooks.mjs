@@ -9,8 +9,13 @@ const SUPPORT = fileURLToPath(new URL("./", import.meta.url));
 //  - The Supabase client and the results-email sender are ALWAYS swapped for
 //    in-memory test doubles. There is no switch that turns the real ones on, so
 //    a test cannot reach the real database, storage or email service.
+//  - The web-push package is ALWAYS swapped for stub-web-push.mjs, so no test
+//    can reach a real push service.
 export async function resolve(specifier, context, nextResolve) {
   if (specifier === "next/server") return nextResolve("next/server.js", context);
+  if (specifier === "web-push") {
+    return { url: pathToFileURL(SUPPORT + "stub-web-push.mjs").href, shortCircuit: true };
+  }
   if (specifier.startsWith("@/")) {
     const rel = specifier.slice(2);
     if (rel === "lib/supabase/server") {

@@ -1,0 +1,30 @@
+# Deploy to /etc/systemd/system/capture-buffer@.service on the VPS.
+# One instance per stream key: systemctl enable --now capture-buffer@main
+# (later capture-buffer@fish for the fish tank). Each needs
+# /etc/capture/streams/<key>.env with RTMP_URL=... (see capture-buffer.sh).
+[Unit]
+Description=Capture rewind buffer for stream %i
+After=network-online.target nginx.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=capture
+Group=capture
+EnvironmentFile=/etc/capture/streams/%i.env
+ExecStart=/opt/capture-service/capture-buffer.sh %i
+# The stream being offline makes ffmpeg exit; just keep trying.
+Restart=always
+RestartSec=5
+Nice=5
+# ~85-100 MB per stream at the current ~4.5 Mbit/s; well under this.
+MemoryMax=200M
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/capture/buffer
+
+[Install]
+WantedBy=multi-user.target

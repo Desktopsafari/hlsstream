@@ -1,0 +1,27 @@
+# Deploy to /etc/systemd/system/capture-service.service on the VPS.
+[Unit]
+Description=Desktop Safari Live capture service (clips and photos)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=capture
+Group=capture
+WorkingDirectory=/opt/capture-service
+EnvironmentFile=/etc/capture/capture.env
+ExecStart=/usr/bin/node /opt/capture-service/server.mjs
+Restart=always
+RestartSec=5
+# Two ffmpeg jobs at ~70-100 MB each plus node; the box has no swap.
+MemoryMax=350M
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/capture/files
+ReadOnlyPaths=/var/lib/capture/buffer
+
+[Install]
+WantedBy=multi-user.target

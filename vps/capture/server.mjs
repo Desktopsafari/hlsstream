@@ -114,6 +114,8 @@ async function filesBytes() {
 
 // Write to a .part name, then rename, so nginx never serves a half-written file.
 async function finish(part, final) {
+  // ffmpeg can exit cleanly having written nothing (no frame found).
+  if ((await fs.stat(part)).size === 0) throw new Error(`ffmpeg wrote an empty ${path.basename(final)}`);
   await fs.chmod(part, 0o644);
   await fs.rename(part, final);
   return (await fs.stat(final)).size;
@@ -181,7 +183,10 @@ async function capture(input) {
       `drawtext=fontfile=${FONT}:text=desktopsafari.com:fontcolor=white@0.6:fontsize=h/32:` +
       "shadowcolor=black@0.5:shadowx=2:shadowy=2:x=w-tw-h/40:y=h-th-h/40";
     try {
-      await ffmpeg(["-ss", frame.offsetSeconds.toFixed(3), "-i", frame.segment.file, "-frames:v", "1", "-vf", watermark, "-q:v", "2", "-f", "mjpeg", part]);
+      // -ss after -i: decode from the segment's one keyframe and stop at the
+      // offset. Seeking on the input finds no frame past ~1 s into a 2 s
+      // segment (there's no later keyframe to seek to).
+      await ffmpeg(["-i", frame.segment.file, "-ss", frame.offsetSeconds.toFixed(3), "-frames:v", "1", "-vf", watermark, "-q:v", "2", "-f", "mjpeg", part]);
       const bytes = await finish(part, final);
       await ffmpeg(["-i", final, "-vf", "scale=480:-2", "-q:v", "5", "-f", "mjpeg", thumbPart]);
       const thumbBytes = await finish(thumbPart, thumbFinal);

@@ -20,6 +20,7 @@ import AdminTabs from "./AdminTabs";
 import CollapsibleSection from "./CollapsibleSection";
 import LiveNowStrip from "./LiveNowStrip";
 import PushAdmin from "./PushAdmin";
+import CapturesAdmin from "./CapturesAdmin";
 
 type PollOptionResult = {
   option_id: string;
@@ -596,6 +597,11 @@ export default function AdminDashboard() {
             id: "push",
             label: "Push",
             content: [<PushAdmin key="Push" />],
+          },
+          {
+            id: "captures",
+            label: "Captures",
+            content: [<CapturesAdmin key="Captures" />],
           },
           {
             id: "inbox",

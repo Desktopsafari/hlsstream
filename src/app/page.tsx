@@ -4,6 +4,7 @@ import PollSection from "@/components/poll/PollSection";
 import SpeciesCard from "@/components/species/SpeciesCard";
 import ViewerCount from "@/components/viewers/ViewerCount";
 import NotifyMe from "@/components/notify/NotifyMe";
+import CaptureButtons from "@/components/capture/CaptureButtons";
 import SuggestionEventCard from "@/components/event/SuggestionEventCard";
 import Card from "@/components/ui/Card";
 import Announcements from "@/components/announcement/Announcements";
@@ -44,7 +45,11 @@ export default function HomePage() {
             <HlsPlayer />
             <div className="flex h-6 items-center gap-3 pt-1">
               <ViewerCount />
-              <NotifyMe />
+              {/* Photo / Clip render nothing until captures are set up. */}
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                <CaptureButtons />
+                <NotifyMe />
+              </div>
             </div>
           </div>
 

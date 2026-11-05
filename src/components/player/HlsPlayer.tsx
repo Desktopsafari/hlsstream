@@ -3,12 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import type Hls from "hls.js";
 import { HLS_STREAM_URL, STREAM_RETRY_INTERVAL_MS } from "@/config/constants";
-
-type PlayerStatus = "loading" | "playing" | "offline" | "unsupported";
+import { setPlayer, setPlayerStatus, type PlayerStatus } from "@/lib/playerRegistry";
 
 export default function HlsPlayer() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [status, setStatus] = useState<PlayerStatus>("loading");
+
+  // Shared with the capture buttons (see playerRegistry), which sit outside
+  // the player so pressing them never re-renders or remounts the video.
+  useEffect(() => {
+    setPlayerStatus(status);
+  }, [status]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -42,6 +47,14 @@ export default function HlsPlayer() {
 
     function setupNative() {
       setStatus("loading");
+      // Safari's own player: how far currentTime is behind the playlist end.
+      setPlayer({
+        video: video!,
+        latency: () => {
+          const s = video!.seekable;
+          return s.length > 0 ? s.end(s.length - 1) - video!.currentTime : null;
+        },
+      });
       video!.src = HLS_STREAM_URL;
 
       const onLoaded = () => {
@@ -69,6 +82,8 @@ export default function HlsPlayer() {
       }
 
       hls = new HlsCtor({ enableWorker: true });
+      const instance = hls;
+      setPlayer({ video: video!, latency: () => instance.latency });
 
       hls.on(HlsCtor.Events.MANIFEST_PARSED, () => {
         setStatus("playing");
@@ -111,6 +126,7 @@ export default function HlsPlayer() {
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("playing", onPlaying);
       hls?.destroy();
+      setPlayer(null);
     };
   }, []);
 
@@ -119,6 +135,9 @@ export default function HlsPlayer() {
       <video
         ref={videoRef}
         className="h-full w-full"
+        // Lets "Take photo" draw the frame onto a canvas (the HLS host sends
+        // CORS headers). hls.js feeds the video through MSE either way.
+        crossOrigin="anonymous"
         controls
         playsInline
         muted

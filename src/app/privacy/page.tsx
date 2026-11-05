@@ -8,7 +8,7 @@ export const metadata = {
 
 // Keep this page accurate: any change that collects, stores, shares, or keeps
 // visitor data differently must update it in the same change (see AGENTS.md).
-const LAST_UPDATED = "November 2, 2026";
+const LAST_UPDATED = "November 5, 2026";
 const OWNER = "DesktopSafari";
 const CONTACT_EMAIL = "desktopsafari@gmail.com";
 
@@ -39,6 +39,11 @@ export default function PrivacyPage() {
             If you turn on phone or browser notifications, we store only your device&rsquo;s push
             address and the categories you chose, never your name or email. You can turn them off
             any time.
+          </li>
+          <li>
+            &ldquo;Take photo&rdquo; makes the photo in your own browser: it never reaches our
+            servers. A clip you save is kept on our server for 24 hours behind a private link,
+            then deleted, unless we choose it for the public gallery.
           </li>
           <li>
             Our server keeps ordinary access logs (including IP addresses) for about a week.
@@ -119,6 +124,26 @@ export default function PrivacyPage() {
           notifications off, use &ldquo;Turn off&rdquo; in the same window, or block notifications
           for this site in your browser or phone settings.
         </p>
+        <p id="captures" className="scroll-mt-6">
+          <strong>Photos and clips.</strong> &ldquo;Take photo&rdquo; under the video copies the
+          frame you are watching into an image inside your browser and adds our watermark. That
+          photo is never uploaded: it goes nowhere unless you download or share it yourself. If
+          your browser can&rsquo;t make the photo, our server makes it instead, and it is then
+          handled like a clip. When you save a clip, our server cuts the last 30 seconds of the
+          stream you were watching and stores the file (only the stream&rsquo;s own video,
+          nothing from your device) under a long random link, so only people you give the link
+          to can open it. To enforce the limits on how many captures one connection can make, we
+          store a scrambled code made from your IP address (a keyed hash; the IP address itself
+          is not stored and can&rsquo;t be read back from it) with each capture, along with its
+          size and time. Visitor clips and server-made photos are deleted after 24 hours. We may
+          pick a capture for the public{" "}
+          <Link className="font-medium text-forest underline" href="/gallery">
+            gallery
+          </Link>{" "}
+          or keep it; when we do, the code made from your IP address is removed from it at once,
+          and the capture is kept until we remove it. Opening or downloading a capture file is
+          not logged by our server.
+        </p>
         <p>
           <strong>The contact box.</strong> If you send a suggestion, we store the text of your
           message. We don&rsquo;t ask for your name or email, so only include what you are happy
@@ -156,7 +181,8 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>Supabase</strong> is our database and image storage. Chat, votes, contact
-            messages and name ideas live here.
+            messages and name ideas live here, as do the records of saved clips (the files
+            themselves are on our DigitalOcean server).
           </li>
           <li>
             <strong>Resend</strong> sends our emails and holds the list of people who signed up
@@ -164,7 +190,7 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>DigitalOcean</strong> runs our video and chat server, located in New York,
-            USA.
+            USA. Saved clips and server-made photos are stored on it.
           </li>
           <li>
             <strong>Google (Gmail)</strong> receives the contact-box messages and poll results
@@ -188,6 +214,17 @@ export default function PrivacyPage() {
           Ko-fi is loaded on this site, and Ko-fi only gets involved if you click through to it,
           under its own privacy policy. We do not load third-party scripts, fonts, ads or
           analytics.
+        </p>
+        <p>
+          The one exception is the{" "}
+          <Link className="font-medium text-forest underline" href="/gallery">
+            gallery
+          </Link>
+          : some featured clips are posted on YouTube, TikTok or Instagram, and the gallery shows
+          them in that service&rsquo;s player. Nothing from those services loads until you press
+          play on that clip. Once you do, that service receives your IP address and browser
+          details and may set its own cookies, under its own privacy policy. For YouTube we use
+          its privacy-enhanced mode (youtube-nocookie.com).
         </p>
         <p>
           These providers store data in their own locations and under their own policies. We
@@ -234,6 +271,16 @@ export default function PrivacyPage() {
                   Until you turn notifications off, or the subscription expires or stops working
                   (deleted as soon as the push service says it&rsquo;s gone, or after 5 failed
                   sends in a row)
+                </td>
+              </tr>
+              <tr className="border-b border-moss">
+                <td className="px-3 py-2">
+                  Saved clips and server-made photos, with the code made from your IP address
+                </td>
+                <td className="px-3 py-2">
+                  24 hours, then deleted automatically (checked every hour). If we feature one in
+                  the gallery or keep it, the code is removed at once and the file is kept until we
+                  remove it. Photos made in your browser are never stored by us.
                 </td>
               </tr>
               <tr className="border-b border-moss">
@@ -315,6 +362,10 @@ export default function PrivacyPage() {
           <li>
             You can ask us to delete a contact-box message or a name idea if you tell us what it
             said.
+          </li>
+          <li>
+            You can ask us to delete a clip you saved before its 24 hours are up, or to take a
+            capture out of the gallery. Send us its link.
           </li>
           <li>
             Once a vote has been unlinked from its browser ID, we can no longer tell which vote was

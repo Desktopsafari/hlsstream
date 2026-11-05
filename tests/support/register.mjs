@@ -13,5 +13,17 @@ process.env.VAPID_PRIVATE_KEY = "test-private-key";
 process.env.VAPID_SUBJECT = "mailto:test@example.com";
 process.env.PUSH_CRON_SECRET = "test-push-secret";
 process.env.ADMIN_PASSWORD = "test-admin-password";
+// Capture: a made-up host that only the stub capture service answers
+// (stub-capture-service.mjs), and test secrets.
+process.env.CAPTURE_SERVICE_URL = "https://capture.test/capture-api";
+process.env.CAPTURE_SECRET = "test-capture-secret-that-is-long-enough";
+process.env.CAPTURE_CRON_SECRET = "test-capture-cron-secret";
+
+// No test may reach the network: fetch only answers the stub capture service.
+globalThis.fetch = async (input, init) => {
+  const url = new URL(typeof input === "string" ? input : input.url);
+  if (url.hostname === "capture.test" && globalThis.__captureService) return globalThis.__captureService(url, init);
+  throw new Error(`Tests may not reach the network (${url.origin}).`);
+};
 
 register("./hooks.mjs", import.meta.url);

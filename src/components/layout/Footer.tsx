@@ -9,6 +9,9 @@ export default function Footer() {
           &copy; {new Date().getFullYear()} {SITE_NAME}
         </span>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Link href="/gallery" className="hover:text-forest">
+            Gallery
+          </Link>
           <Link href="/contact" className="hover:text-forest">
             Contact
           </Link>

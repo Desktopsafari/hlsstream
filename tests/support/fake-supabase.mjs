@@ -292,6 +292,15 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
       db.polls.push(row);
       return row;
     },
+    // A second stream (e.g. the fish tank), with the column defaults from migrations/0001.
+    addStream(s = {}) {
+      const row = {
+        ...MAIN_STREAM(), id: "fish", name: "TEST fish", slug: "fish", short_name: "Fish", hls_url: null, chat_room: null,
+        capture_key: null, is_listed: false, sort_order: 2, ...s,
+      };
+      db.streams.push(row);
+      return row;
+    },
     addOption(pollId, label, order) {
       const row = { id: randomUUID(), poll_id: pollId, label, display_order: order };
       db.poll_options.push(row);

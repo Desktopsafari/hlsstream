@@ -53,7 +53,7 @@ Deviations made while doing steps 1–4 (and why):
 | 3 | 3 | `0002_stream_ids.sql` | written, not run |
 | 4 | 4 | `0003_settings_cron_email.sql` | written, not run |
 | 5 | 5 (part) | Shared infra: `streams` server helpers, `requireStream()`, branded `StreamId`, `lib/time/eastern.ts`, isolation-test scaffolding | |
-| 6 | 5 + 10 | Per feature, two commits each (move, then scope): polls → announcements/events → species → captures → push (global switch) → chat UI | polls done (5a, 2026-11-06); announcements/events done (5b, 2026-11-06); species done (5c, 2026-11-06) |
+| 6 | 5 + 10 | Per feature, two commits each (move, then scope): polls → announcements/events → species → captures → push (global switch) → chat UI | polls done (5a, 2026-11-06); announcements/events done (5b, 2026-11-06); species done (5c, 2026-11-06); captures done (5d, 2026-11-06) |
 | 7 | — | Dead columns + probe code cleanup (decision 12, after the production check) | |
 | 8 | 6 | Chat service rooms + per-stream viewer counts (VPS deploy, ask first) | |
 | 9 | 7 | Stream-aware DST-proof crons with `-late` aliases | |
@@ -115,6 +115,26 @@ stream, and the upserts conflict on it). Left as they are on purpose:
 - **The names block heading defaults to "Frog names"** on every stream (`NAMES_HEADING_DEFAULT` and the column default);
   a fish card needs its heading set by hand.
 - **Dead column cleanup** (`species_cards.residents`, decision 12) is still its own step; nothing here reads or writes it.
+
+### Deferred from 5d (captures)
+
+Data layer in `src/lib/data/captures/` (`core`, `create`, `cleanup`, `gallery`, `admin`; client-safe `rules`); no SQL
+needed (`captures.stream_id` and its foreign key came with `0002`). The site sends the stream's `capture_key` to the
+service, `main` for frogs, so the deployed service sees the same request as before. Left as they are on purpose:
+
+- **Gallery is per stream, not global with a badge** (this step's brief overrides decision 7): `/gallery?stream=`,
+  default the frog stream. A global gallery with a stream badge and filter would be a later, visible change.
+- **Clients send no stream yet**: `CaptureButtons`, `CapturesAdmin` and `/gallery` links use the frog stream until
+  stream pages (step 12) and the admin selector (step 10). The admin tab's "live" line still reads `server.streams.main`.
+- **Site-wide on purpose**: pause switch (`site_settings.captures_paused`), per-visitor limits (by requester hash, every
+  stream), site-wide hourly limits, the 5 GB visitor budget, the admin usage totals, and the VPS disk guard. The hourly
+  cleanup goes through every stream with no on/off flag.
+- **File names are not per stream**: `<id>.mp4` / `<id>.jpg` / `<id>-t.jpg` in one flat folder on the VPS, as before.
+  Adding the stream to the name would need the VPS name check and nginx locations changed; the row's `stream_id` is
+  enough to know which stream a file belongs to.
+- **A capture_key the service doesn't know** (not in `CAPTURE_STREAMS`) gets the service's 400 and the visitor sees the
+  generic "Something went wrong"; the row is marked failed and cleaned up. Before giving fish a `capture_key`, do the
+  VPS steps in `vps/capture/README.md` ("Adding the fish tank later").
 
 ---
 

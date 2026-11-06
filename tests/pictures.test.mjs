@@ -4,8 +4,8 @@ import {
   png, publicPoll, queue, req, routes, scheduledPolls, textAsPng, textFile, webp, withNow,
 } from "./support/helpers.mjs";
 
-const imgs = await load("lib/pollImages.ts");
-const admin = await load("lib/pollAdmin.ts");
+const imgs = await load("lib/data/polls/images.ts");
+const admin = await load("lib/data/polls/admin.ts");
 
 const upload = async (file, extra = {}) =>
   json(await (await routes.image()).POST(formReq("POST", "/api/admin/polls/image", file, extra)));

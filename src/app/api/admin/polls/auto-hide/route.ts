@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { saveAutoHideHours } from "@/lib/pollVisibility";
+import { saveAutoHideHours } from "@/lib/data/polls";
 
 // The "Hide closed polls after" setting: { hours: null | 6 | 12 | 24 | 48 | 72 | 168 }.
 export async function PUT(request: Request) {

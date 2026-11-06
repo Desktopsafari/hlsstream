@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { isAuthorizedCronRequest } from "@/lib/cronAuth";
 import { cleanupOldChatMessages, CHAT_RETENTION_DAYS } from "@/lib/chatCleanup";
 import { cleanupOldFormAttempts } from "@/lib/rateLimit";
-import { unlinkOldVotes, VOTE_LINK_RETENTION_DAYS } from "@/lib/voteUnlink";
-import { cleanupPendingPollImages } from "@/lib/pollImages";
+import { cleanupPendingPollImages, unlinkOldVotes, VOTE_LINK_RETENTION_DAYS } from "@/lib/data/polls";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 // Daily housekeeping, triggered by Vercel Cron (see vercel.json):

@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { getOpenNowInfo, openPollNow } from "@/lib/pollOpen";
 import {
   createPollWithOptions,
   deletePollWithFiles,
+  getOpenNowInfo,
+  openPollNow,
   parseNewOptions,
   parsePendingImage,
-} from "@/lib/pollAdmin";
+} from "@/lib/data/polls";
 import { isDailyColumns, resolveDuration, type DurationColumns } from "@/lib/pollDuration";
 
 // What the admin sees before confirming "Open now": how long voting would run,

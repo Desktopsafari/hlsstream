@@ -1,9 +1,9 @@
 import type { createServiceRoleClient } from "@/lib/supabase/server";
 import { sendPollResultsEmail } from "@/lib/email";
 import { isDailyColumns } from "@/lib/pollDuration";
-import { continueRepeatingPoll, resumePausedRepeatingPoll } from "@/lib/pollRepeat";
+import { continueRepeatingPoll, resumePausedRepeatingPoll } from "@/lib/data/polls/repeat";
 import { getPollState, isLongPoll, type PollTiming } from "@/lib/pollSchedule";
-import { loadPollDuration } from "@/lib/pollTiming";
+import { loadPollDuration } from "@/lib/data/polls/timing";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 

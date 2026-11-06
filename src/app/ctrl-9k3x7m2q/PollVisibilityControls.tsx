@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AUTO_HIDE_CHOICES, autoHideLabel } from "@/lib/pollVisibility";
+import { AUTO_HIDE_CHOICES, autoHideLabel } from "@/lib/data/polls/visibility";
 
 export type AdminPollVisibility =
   | { hidden: false; hideAt: string | null }

@@ -1,5 +1,5 @@
 import type { createServiceRoleClient } from "@/lib/supabase/server";
-import { closePollAndFinish, type LifecycleDeps } from "@/lib/pollClose";
+import { closePollAndFinish, type LifecycleDeps } from "@/lib/data/polls/close";
 import {
   approxSpan,
   DAILY_COLUMNS,
@@ -16,7 +16,7 @@ import {
   getOpenNowWindow,
   getPollState,
 } from "@/lib/pollSchedule";
-import { loadPollDuration, timingSelect } from "@/lib/pollTiming";
+import { loadPollDuration, timingSelect } from "@/lib/data/polls/timing";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 

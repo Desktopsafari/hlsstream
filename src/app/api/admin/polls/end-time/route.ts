@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { DURATION_SQL_HINT, emailNoteFor } from "@/lib/pollDuration";
+import { setPollEndTime } from "@/lib/data/polls";
+import { emailNoteFor } from "@/lib/pollDuration";
 import { formatEasternDay, parseEasternDateTime } from "@/lib/pollSchedule";
-import { durationColumnsExist } from "@/lib/pollTiming";
 
 // Change when voting ends on an open poll: later or earlier, but never into
 // the past (a past end time would close the poll without its results email;
@@ -26,39 +26,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const supabase = createServiceRoleClient();
-  if (!(await durationColumnsExist(supabase))) {
-    return NextResponse.json({ error: DURATION_SQL_HINT }, { status: 400 });
+  const result = await setPollEndTime(createServiceRoleClient(), pollId, end);
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error, code: result.code }, { status: result.status });
   }
-
-  const { data: poll } = await supabase
-    .from("polls")
-    .select("id, status, repeat_daily")
-    .eq("id", pollId)
-    .maybeSingle();
-  if (!poll) return NextResponse.json({ error: "Poll not found." }, { status: 404 });
-  if (poll.status !== "open") {
-    return NextResponse.json({ error: "Only an open poll's end time can be changed here.", code: "not_open" }, { status: 409 });
-  }
-  if (poll.repeat_daily) {
-    return NextResponse.json(
-      { error: "This poll repeats daily. Turn off Repeat daily (Edit) before giving it a different end time." },
-      { status: 409 },
-    );
-  }
-
-  const { data: updated, error } = await supabase
-    .from("polls")
-    .update({ ends_at: end.toISOString(), open_ended: false })
-    .eq("id", pollId)
-    .eq("status", "open")
-    .select("id");
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!updated || updated.length === 0) {
-    return NextResponse.json({ error: "That poll just closed.", code: "not_open" }, { status: 409 });
-  }
-
-  console.log(`Poll ${pollId} end time set to ${end.toISOString()} by the admin`);
   return NextResponse.json({
     ok: true,
     endsAt: end.toISOString(),

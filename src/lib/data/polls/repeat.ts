@@ -23,7 +23,7 @@ async function pollPictureForCopy(supabase: Supabase, pollId: string): Promise<s
 //
 // The copy points at the same question picture file as the original. That's
 // safe because a file is only deleted when no poll references it any more
-// (see removeFileIfUnreferenced in pollImages.ts).
+// (see removeFileIfUnreferenced in images.ts).
 export async function continueRepeatingPoll(
   supabase: Supabase,
   closedPollId: string,

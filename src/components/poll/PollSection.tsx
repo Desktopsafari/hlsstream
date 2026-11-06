@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { getPublicPoll } from "@/lib/pollVisibility";
+import { getPublicPoll } from "@/lib/data/polls";
 import PollCard from "./PollCard";
 
 // Don't let a slow database hold the page up: fall back to rendering the card

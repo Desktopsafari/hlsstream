@@ -27,12 +27,12 @@ let visibilityModule;
 
 // A brand-new in-memory database (and empty email log) for the next scenario.
 export async function fresh(opts) {
-  timingModule ??= await load("lib/pollTiming.ts");
+  timingModule ??= await load("lib/data/polls/timing.ts");
   const fake = createFake(opts);
   globalThis.__fake = fake;
   globalThis.__emails = [];
   timingModule.resetDurationColumnCache();
-  visibilityModule ??= await load("lib/pollVisibility.ts");
+  visibilityModule ??= await load("lib/data/polls/visibility.ts");
   visibilityModule.resetHideColumnCache();
   return fake;
 }

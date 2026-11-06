@@ -1,6 +1,6 @@
 import type { createServiceRoleClient } from "@/lib/supabase/server";
 import { DURATION_SQL_HINT, isDailyColumns, type DurationColumns } from "@/lib/pollDuration";
-import { durationColumnsExist } from "@/lib/pollTiming";
+import { durationColumnsExist } from "@/lib/data/polls/timing";
 import {
   attachPendingImage,
   IMAGES_SQL_HINT,
@@ -8,7 +8,7 @@ import {
   isPendingPath,
   loadPollImagePaths,
   removeFileIfUnreferenced,
-} from "@/lib/pollImages";
+} from "@/lib/data/polls/images";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 

@@ -1,6 +1,6 @@
 import type { createServiceRoleClient } from "@/lib/supabase/server";
 import { getPollEnd, getPollState, type PollTiming } from "@/lib/pollSchedule";
-import { timingSelect } from "@/lib/pollTiming";
+import { timingSelect } from "@/lib/data/polls/timing";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 

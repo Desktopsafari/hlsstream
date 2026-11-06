@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { getPollState, type PollTiming } from "@/lib/pollSchedule";
-import { timingSelect } from "@/lib/pollTiming";
+import { castVote } from "@/lib/data/polls";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -18,53 +17,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing pollId, optionId, or sessionId" }, { status: 400 });
   }
 
-  const supabase = createServiceRoleClient();
-
-  // ends_at / open_ended exist once supabase/poll_duration.sql has been run.
-  const { data: pollRow } = await supabase
-    .from("polls")
-    .select(`id, status, opens_at${await timingSelect(supabase)}`)
-    .eq("id", pollId)
-    .maybeSingle();
-  const poll = pollRow as unknown as ({ id: string; status: string } & PollTiming) | null;
-
-  const state = poll ? getPollState(poll) : null;
-  if (!state || (state.phase !== "open" && state.phase !== "ended")) {
-    return NextResponse.json({ error: "This poll isn't open for voting." }, { status: 400 });
-  }
-
-  // The crons that flip status to "closed" run once a day, imprecisely, so
-  // the real end time is enforced here on every vote: the normal 8pm cutoff,
-  // a chosen end time, or never for an open-ended poll.
-  if (!state.votingOpen) {
-    return NextResponse.json({ error: "Voting has closed for this poll." }, { status: 400 });
-  }
-
-  const { data: option } = await supabase
-    .from("poll_options")
-    .select("id")
-    .eq("id", optionId)
-    .eq("poll_id", pollId)
-    .maybeSingle();
-
-  if (!option) {
-    return NextResponse.json({ error: "Invalid option." }, { status: 400 });
-  }
-
-  const { error } = await supabase.from("votes").insert({
-    poll_id: pollId,
-    option_id: optionId,
-    session_id: sessionId,
-  });
-
-  if (error) {
-    // Unique constraint violation (poll_id, session_id) -> already voted.
-    if (error.code === "23505") {
-      return NextResponse.json({ error: "You've already voted in this poll." }, { status: 409 });
-    }
-    console.error("Vote insert failed:", error.message);
-    return NextResponse.json({ error: "Failed to record vote." }, { status: 500 });
-  }
-
+  const result = await castVote(createServiceRoleClient(), { pollId, optionId, sessionId });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json({ ok: true });
 }

@@ -8,7 +8,7 @@ import {
   isPendingPath,
   setPollImage,
   uploadPendingImage,
-} from "@/lib/pollImages";
+} from "@/lib/data/polls";
 
 // The picture above a poll's question. With a pollId the picture goes straight
 // onto that poll (allowed whenever the question text could be edited: queued or

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { setPollHidden } from "@/lib/pollVisibility";
+import { setPollHidden } from "@/lib/data/polls";
 
 // "Hide from site" / "Show on site" for a closed poll. Never deletes anything.
 export async function POST(request: Request) {

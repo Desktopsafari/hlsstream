@@ -47,7 +47,7 @@ type Poll = {
   duration_days: number | null;
   voting_end: string | null; // for an open poll: when voting ends, null = no end
   is_long: boolean;
-  // Whether visitors can see it (see src/lib/pollVisibility.ts).
+  // Whether visitors can see it (see src/lib/data/polls/visibility.ts).
   visibility: AdminPollVisibility;
   force_shown: boolean;
 };

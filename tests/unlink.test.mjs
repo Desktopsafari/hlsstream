@@ -1,7 +1,7 @@
 import test from "node:test";
 import { ET, byId, check, closeNow, cronClose, db, fresh, load, withNow } from "./support/helpers.mjs";
 
-const unlink = await load("lib/voteUnlink.ts");
+const unlink = await load("lib/data/polls/unlink.ts");
 
 const unlinkAt = (date) => withNow(date, () => unlink.unlinkOldVotes());
 const linked = () => db().db.votes.filter((v) => !v.session_id.startsWith("anon-")).length;

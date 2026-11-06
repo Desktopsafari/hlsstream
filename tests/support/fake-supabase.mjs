@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 // to the event loop first, so concurrent requests interleave like separate
 // connections; each single statement is then atomic, like in Postgres.
 const COLUMNS = {
-  polls: ["id", "question", "status", "opens_at", "closes_at", "created_at", "repeat_daily", "repeat_paused"],
+  polls: ["id", "stream_id", "question", "status", "opens_at", "closes_at", "created_at", "repeat_daily", "repeat_paused"],
   poll_options: ["id", "poll_id", "label", "display_order"],
   votes: ["id", "poll_id", "option_id", "session_id", "created_at"],
   poll_results: ["poll_id", "option_id", "label", "display_order", "vote_count"],
@@ -16,23 +16,42 @@ const COLUMNS = {
   // supabase/push_notifications.sql
   push_categories: ["id", "stream_id", "name", "display_order", "is_active", "created_at"],
   push_subscriptions: ["id", "stream_id", "endpoint", "p256dh", "auth", "category_ids", "created_at", "last_success_at", "failure_count"],
-  push_sends: ["id", "title", "message", "url", "category_id", "category_name", "source", "status", "recipients", "sent", "failed", "created_at"],
+  push_sends: ["id", "stream_id", "title", "message", "url", "category_id", "category_name", "source", "status", "recipients", "sent", "failed", "created_at"],
   push_scheduled: ["id", "stream_id", "title", "message", "url", "category_id", "send_at", "status", "claimed_at", "created_at"],
   push_repeating: ["id", "stream_id", "title", "message", "url", "category_id", "time_of_day", "days_of_week", "is_active", "skip_date", "last_sent_date", "next_send_at", "created_at", "updated_at"],
   push_settings: ["stream_id", "paused", "updated_at"],
   push_due: ["kind", "id", "stream_id", "due_at"],
   // supabase/captures.sql
   captures: ["id", "stream_id", "kind", "created_by", "requester_hash", "seconds", "bytes", "file_name", "thumb_name", "status", "expires_at", "featured", "featured_at", "kept", "external_url", "created_at"],
+  // supabase/schema.sql + migrations/0002 (stream_id)
+  chat_messages: ["id", "stream_id", "session_id", "display_name", "message", "created_at"],
+  // supabase/species.sql + migrations/0001
+  streams: ["id", "name", "created_at", "slug", "short_name", "tagline", "hls_url", "chat_room", "capture_key", "poster_path", "polls_enabled", "is_active", "is_listed", "sort_order", "updated_at"],
+  // migrations/0003
+  stream_settings: ["stream_id", "key", "value", "updated_at"],
+  cron_runs: ["stream_id", "job", "eastern_date", "status", "detail", "ran_at"],
+  email_sends: ["id", "category_id", "category_name", "stream_id", "subject", "resend_broadcast_id", "created_at"],
 };
 
-// Defaults the real push tables fill in on insert.
+// The one stream row the live database has after migrations/0001.
+const MAIN_STREAM = () => ({
+  id: "main", name: "Desktop Safari Live", created_at: new Date().toISOString(), slug: "frogs", short_name: "Frogs", tagline: null,
+  hls_url: "https://stream.desktopsafari.com/hls/stream.m3u8", chat_room: "main", capture_key: "main", poster_path: null,
+  polls_enabled: true, is_active: true, is_listed: true, sort_order: 1, updated_at: new Date().toISOString(),
+});
+
+// Defaults the real tables fill in on insert (push, captures, and the Part 2 tables).
 const PUSH_DEFAULTS = {
   push_categories: () => ({ stream_id: "main", display_order: 0, is_active: true }),
   push_subscriptions: () => ({ stream_id: "main", category_ids: [], last_success_at: null, failure_count: 0 }),
-  push_sends: () => ({ message: "", url: "/", category_id: null, category_name: null, status: "sent", recipients: 0, sent: 0, failed: 0 }),
+  push_sends: () => ({ stream_id: null, message: "", url: "/", category_id: null, category_name: null, status: "sent", recipients: 0, sent: 0, failed: 0 }),
   push_scheduled: () => ({ stream_id: "main", url: "/", status: "pending", claimed_at: null }),
   push_repeating: () => ({ stream_id: "main", url: "/", days_of_week: [0, 1, 2, 3, 4, 5, 6], is_active: true, skip_date: null, last_sent_date: null, next_send_at: null, updated_at: new Date().toISOString() }),
   push_settings: () => ({ paused: false, updated_at: new Date().toISOString() }),
+  chat_messages: () => ({ stream_id: "main" }),
+  stream_settings: () => ({ value: null, updated_at: new Date().toISOString() }),
+  cron_runs: () => ({ status: "claimed", detail: null, ran_at: new Date().toISOString() }),
+  email_sends: () => ({ category_id: null, category_name: null, stream_id: null, resend_broadcast_id: null }),
   captures: () => ({ stream_id: "main", requester_hash: null, seconds: 0, bytes: 0, file_name: null, thumb_name: null, status: "pending", expires_at: null, featured: false, featured_at: null, kept: false, external_url: null }),
 };
 
@@ -49,6 +68,7 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
     polls: [], poll_options: [], votes: [], announcements: [], species_cards: [], site_settings: [], contact_form_attempts: [],
     push_categories: [], push_subscriptions: [], push_sends: [], push_scheduled: [], push_repeating: [], push_settings: [],
     captures: [],
+    chat_messages: [], streams: [MAIN_STREAM()], stream_settings: [], cron_runs: [], email_sends: [],
   };
   const queries = []; // every table/view touched, in order (for "one small query when idle")
   const files = new Map(); // `${bucket}/${path}` -> { created_at, size }
@@ -170,7 +190,7 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
         const list = Array.isArray(this.payload) ? this.payload : [this.payload];
         const created = list.map((p) => {
           const base = { id: randomUUID(), created_at: new Date().toISOString() };
-          if (this.table === "polls") Object.assign(base, { status: "scheduled", repeat_daily: false, repeat_paused: false });
+          if (this.table === "polls") Object.assign(base, { stream_id: "main", status: "scheduled", repeat_daily: false, repeat_paused: false });
           if (this.table === "polls" && imageColumn) base.image_path = null;
           if (this.table === "polls" && durationColumns) Object.assign(base, { ends_at: null, open_ended: false, duration_days: null });
           if (this.table === "polls" && hideColumns) Object.assign(base, { hidden_at: null, force_shown: false });
@@ -265,7 +285,7 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
     // helpers for the tests
     addPoll(p = {}) {
       const row = {
-        id: randomUUID(), question: "TEST poll", status: "scheduled", repeat_daily: false, repeat_paused: false,
+        id: randomUUID(), stream_id: "main", question: "TEST poll", status: "scheduled", repeat_daily: false, repeat_paused: false,
         opens_at: new Date().toISOString(), closes_at: new Date().toISOString(), created_at: new Date().toISOString(), ...(imageColumn ? { image_path: null } : {}), ...(durationColumns ? { ends_at: null, open_ended: false, duration_days: null } : {}), ...(hideColumns ? { hidden_at: null, force_shown: false } : {}), ...p,
       };
       if (row.image_path) files.set(`event-images/${row.image_path}`, { created_at: new Date().toISOString(), size: 1 });

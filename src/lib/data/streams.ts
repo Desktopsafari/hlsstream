@@ -8,7 +8,15 @@ type Supabase = ReturnType<typeof createServiceRoleClient>;
 // can't be handed an unchecked string by mistake.
 export type StreamId = string & { readonly __brand: "StreamId" };
 
-export type PollStream = { id: StreamId; slug: string; polls_enabled: boolean };
+// capture_key: the VPS capture buffer (capture-buffer@<key>); null = no
+// captures on this stream. is_active: the stream's page is switched on.
+export type PollStream = {
+  id: StreamId;
+  slug: string;
+  polls_enabled: boolean;
+  capture_key: string | null;
+  is_active: boolean;
+};
 
 // The stream a request means when it names none: the frog stream (id 'main',
 // slug 'frogs'). Only used to fill in a missing ?stream= while the site has
@@ -18,11 +26,25 @@ export const DEFAULT_STREAM_ID = STREAM_ID;
 // A stream id or slug as it may appear in a request.
 const STREAM_REF_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
-const COLS = "id, slug, polls_enabled";
+const COLS = "id, slug, polls_enabled, capture_key, is_active";
 
-function toStream(row: { id: string; slug: string; polls_enabled: boolean | null } | null): PollStream | null {
+type StreamRow = {
+  id: string;
+  slug: string;
+  polls_enabled: boolean | null;
+  capture_key: string | null;
+  is_active: boolean | null;
+};
+
+function toStream(row: StreamRow | null): PollStream | null {
   if (!row) return null;
-  return { id: row.id as StreamId, slug: row.slug, polls_enabled: row.polls_enabled !== false };
+  return {
+    id: row.id as StreamId,
+    slug: row.slug,
+    polls_enabled: row.polls_enabled !== false,
+    capture_key: row.capture_key || null,
+    is_active: row.is_active !== false,
+  };
 }
 
 // Looks a stream up by slug ('frogs') or id ('main'). A slug wins if a value
@@ -83,7 +105,7 @@ export async function listStreams(supabase: Supabase): Promise<PollStream[] | nu
     console.error("Stream list failed:", error.message);
     return null;
   }
-  return ((data ?? []) as { id: string; slug: string; polls_enabled: boolean }[])
+  return ((data ?? []) as StreamRow[])
     .map((r) => toStream(r))
     .filter((s): s is PollStream => s !== null);
 }

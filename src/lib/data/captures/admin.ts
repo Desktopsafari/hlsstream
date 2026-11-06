@@ -1,4 +1,5 @@
 import type { createServiceRoleClient } from "@/lib/supabase/server";
+import type { StreamId } from "@/lib/data/streams";
 import {
   CAPTURE_COLUMNS,
   callService,
@@ -24,14 +25,18 @@ import {
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 
 // What the admin Captures tab shows, and its Feature / Keep / Delete actions.
+// The list and every action are limited to one stream: a capture that belongs
+// to another stream is "not found". The usage totals, the pause switch and the
+// VPS status stay site-wide (the storage budget and the disk are shared).
 
 const LIST_LIMIT = 200;
 
-export async function loadCaptureOverview(supabase: Supabase, now: Date = new Date()) {
+export async function loadCaptureOverview(supabase: Supabase, streamId: StreamId, now: Date = new Date()) {
   const config = captureConfig();
   const { data, error } = await supabase
     .from("captures")
     .select(CAPTURE_COLUMNS)
+    .eq("stream_id", streamId)
     .neq("status", "failed")
     .order("created_at", { ascending: false })
     .limit(LIST_LIMIT);
@@ -39,7 +44,8 @@ export async function loadCaptureOverview(supabase: Supabase, now: Date = new Da
   if (!config) return { supported: false, hint: CAPTURES_ENV_HINT };
 
   const rows = (data ?? []) as CaptureRow[];
-  // Usage covers every row, not just the listed ones.
+  // Usage covers every row on every stream, not just the listed ones: the
+  // budget and the disk are shared.
   const all = await selectAllPages<CaptureRow>((from, to) =>
     supabase
       .from("captures")
@@ -96,9 +102,14 @@ type ActionResult = { status: number; body: Record<string, unknown> };
 
 const ttlFor = (r: Pick<CaptureRow, "created_by">) => (r.created_by === "visitor" ? VISITOR_TTL_MS : ADMIN_TTL_MS);
 
-async function loadRow(supabase: Supabase, id: unknown): Promise<CaptureRow | ActionResult> {
+async function loadRow(supabase: Supabase, streamId: StreamId, id: unknown): Promise<CaptureRow | ActionResult> {
   if (typeof id !== "string" || !/^[A-Za-z0-9_-]{22}$/.test(id)) return { status: 400, body: { error: "Missing capture." } };
-  const { data, error } = await supabase.from("captures").select(CAPTURE_COLUMNS).eq("id", id).maybeSingle();
+  const { data, error } = await supabase
+    .from("captures")
+    .select(CAPTURE_COLUMNS)
+    .eq("id", id)
+    .eq("stream_id", streamId)
+    .maybeSingle();
   if (error) return { status: 500, body: { error: error.message } };
   if (!data) return { status: 404, body: { error: "That capture no longer exists." } };
   return data as CaptureRow;
@@ -107,9 +118,9 @@ async function loadRow(supabase: Supabase, id: unknown): Promise<CaptureRow | Ac
 // Feature (optionally with a YouTube / TikTok / Instagram link), Unfeature,
 // Keep, Unkeep. Featuring or keeping clears the requester hash: the item is
 // then the site's, and the hash was only ever for the rate limits.
-export async function updateCapture(supabase: Supabase, body: unknown, now: Date = new Date()): Promise<ActionResult> {
+export async function updateCapture(supabase: Supabase, streamId: StreamId, body: unknown, now: Date = new Date()): Promise<ActionResult> {
   const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-  const row = await loadRow(supabase, b.id);
+  const row = await loadRow(supabase, streamId, b.id);
   if ("status" in row && "body" in row) return row;
   const r = row as CaptureRow;
   if (r.status !== "ready") return { status: 409, body: { error: "That capture isn't ready." } };
@@ -153,25 +164,25 @@ export async function updateCapture(supabase: Supabase, body: unknown, now: Date
       return { status: 400, body: { error: "Unknown action." } };
   }
 
-  const { error } = await supabase.from("captures").update(patch).eq("id", r.id);
+  const { error } = await supabase.from("captures").update(patch).eq("id", r.id).eq("stream_id", streamId);
   if (error) return { status: 500, body: { error: error.message } };
   return { status: 200, body: { ok: true } };
 }
 
 // Delete: the VPS files first, then the row. If the VPS is down the row
 // stays, so nothing is left on disk without a row pointing at it.
-export async function deleteCapture(supabase: Supabase, body: unknown): Promise<ActionResult> {
+export async function deleteCapture(supabase: Supabase, streamId: StreamId, body: unknown): Promise<ActionResult> {
   const config = captureConfig();
   if (!config) return { status: 503, body: { error: CAPTURES_ENV_HINT } };
   const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-  const row = await loadRow(supabase, b.id);
+  const row = await loadRow(supabase, streamId, b.id);
   if ("status" in row && "body" in row) return row;
   const r = row as CaptureRow;
   const names = [r.file_name, r.thumb_name].filter((n): n is string => !!n);
   if (!(await deleteFromService(config, names))) {
     return { status: 502, body: { error: "Couldn't reach the capture server, so nothing was deleted. Try again in a minute." } };
   }
-  const { error } = await supabase.from("captures").delete().eq("id", r.id);
+  const { error } = await supabase.from("captures").delete().eq("id", r.id).eq("stream_id", streamId);
   if (error) return { status: 500, body: { error: error.message } };
   return { status: 200, body: { ok: true } };
 }

@@ -133,7 +133,7 @@ test("admin captures have no limits and keep 48 hours", async () => {
 
 test("the pause switch stops visitor captures (not the admin), and the GET says so", async () => {
   const { fake } = await setup();
-  const before = await at(T0, () => publicRoute.GET());
+  const before = await at(T0, () => publicRoute.GET(call("GET", "/api/capture")));
   check("enabled, not paused", before.body.enabled === true && before.body.paused === false);
   check("paused", (await at(T0, () => pauseRoute.POST(call("POST", "/api/admin/captures/pause", { paused: true })))).status === 200);
   check("setting stored", fake.db.site_settings.find((s) => s.key === "captures_paused")?.value === true);
@@ -142,7 +142,7 @@ test("the pause switch stops visitor captures (not the admin), and the GET says 
   check("visitor server photo refused too", (await photo(T0, "10.1.1.1")).status === 403);
   check("nothing stored", fake.db.captures.length === 0);
   check("admin still can", (await admin(T0, "POST", { kind: "photo" })).status === 200);
-  const now = await at(T0, () => publicRoute.GET());
+  const now = await at(T0, () => publicRoute.GET(call("GET", "/api/capture")));
   check("GET reports paused", now.body.paused === true);
   await at(T0, () => pauseRoute.POST(call("POST", "/api/admin/captures/pause", { paused: false })));
   check("resumed", (await clip(T0, "10.1.1.1")).status === 200);
@@ -272,7 +272,7 @@ test("featuring clears the hash; plain Feature keeps the file for good, Feature 
   check("feature with link", (await admin(T0, "PATCH", { id: b.id, action: "feature", externalUrl: "https://youtu.be/dQw4w9WgXcQ" })).status === 200);
   check("link stored normalized, hash cleared, file still expires", rowB().external_url === "https://www.youtube.com/watch?v=dQw4w9WgXcQ" && rowB().requester_hash === null && rowB().expires_at === expiresBefore);
 
-  const gallery = await lib.loadGallery(fake);
+  const gallery = await lib.loadGallery(fake, "main");
   check("gallery: both featured", gallery.length === 2);
   const g = gallery.find((i) => i.id === b.id);
   check("linked one embeds, no VPS file link", g.embed?.provider === "youtube" && g.url === null && g.downloadUrl === null);
@@ -281,7 +281,7 @@ test("featuring clears the hash; plain Feature keeps the file for good, Feature 
 
   check("unfeature", (await admin(T0, "PATCH", { id: a.id, action: "unfeature" })).status === 200);
   check("unfeatured gets a fresh 24 h", !rowA().featured && rowA().expires_at === after(24 * HOUR).toISOString());
-  check("gallery: one left", (await lib.loadGallery(fake)).length === 1);
+  check("gallery: one left", (await lib.loadGallery(fake, "main")).length === 1);
 
   const c = (await clip(after(4 * MIN), "10.4.4.1")).body.capture;
   const rowC = () => fake.db.captures.find((r) => r.id === c.id);
@@ -316,7 +316,7 @@ test("expiry cleanup: expired visitor captures deleted on the VPS, then the rows
   const l = fake.db.captures.find((r) => r.id === linked.id);
   check("linked featured: row stays, VPS video removed, thumbnail kept", l && l.file_name === null && !vps.files.has(`${linked.id}.mp4`) && vps.files.has(`${linked.id}-t.jpg`));
   check("admin clip (48 h) not yet", ids.includes(adminClip.id));
-  check("still in the gallery via its link", (await lib.loadGallery(fake)).some((g) => g.id === linked.id && g.embed));
+  check("still in the gallery via its link", (await lib.loadGallery(fake, "main")).some((g) => g.id === linked.id && g.embed));
 
   await cron(after(49 * HOUR));
   check("admin clip gone after 48 h", !fake.db.captures.some((r) => r.id === adminClip.id));
@@ -404,7 +404,7 @@ test("admin overview: usage, budget, kept warning, VPS status (or not responding
 
 test("invisible until set up: no table or no env vars -> buttons hidden, admin says what to do", async () => {
   await setup({ capturesTable: false });
-  const g = await at(T0, () => publicRoute.GET());
+  const g = await at(T0, () => publicRoute.GET(call("GET", "/api/capture")));
   check("no table: not enabled", g.body.enabled === false);
   const a = await admin(T0, "GET");
   check("admin hint names the SQL file", a.body.supported === false && /captures\.sql/.test(a.body.hint));
@@ -415,7 +415,7 @@ test("invisible until set up: no table or no env vars -> buttons hidden, admin s
   const saved = process.env.CAPTURE_SECRET;
   delete process.env.CAPTURE_SECRET;
   try {
-    check("no secret: not enabled", (await at(T0, () => publicRoute.GET())).body.enabled === false);
+    check("no secret: not enabled", (await at(T0, () => publicRoute.GET(call("GET", "/api/capture")))).body.enabled === false);
     check("no secret: POST refused", (await clip(T0, "10.9.9.2")).status === 503);
     check("admin hint names the env vars", /CAPTURE_SECRET/.test((await admin(T0, "GET")).body.hint));
   } finally {

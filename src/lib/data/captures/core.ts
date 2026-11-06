@@ -129,6 +129,7 @@ export async function deleteFromService(config: CaptureConfig, names: string[]):
 
 export const MESSAGES = {
   unavailable: "Captures aren't available right now.",
+  notOnStream: "Photos and clips can't be saved on this stream.",
   paused: "Captures are paused right now. Please try again later.",
   offline: "The stream is offline right now, so there's nothing to capture.",
   warmingUp: "The stream only just came back. Try again in a minute.",
@@ -150,7 +151,9 @@ type Refusal = { status: number; error: string };
 const COUNTED = ["pending", "ready"];
 
 // The visitor limits, counted from the captures table (failed attempts don't
-// count). Returns null when the visitor may go ahead.
+// count). Returns null when the visitor may go ahead. Counted across every
+// stream on purpose (no stream filter): a visitor's limits, the site-wide
+// hourly limits and the storage budget all protect the one shared VPS.
 export async function checkVisitorLimits(
   supabase: Supabase,
   hash: string,

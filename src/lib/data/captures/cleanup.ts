@@ -21,7 +21,8 @@ const CLEANUP_BATCH = 200;
 // items with an external link: only the VPS video goes (the gallery embeds
 // the link; the small thumbnail stays). Failed and stuck attempts are
 // cleared the same way. If the VPS is down nothing is removed from the
-// table, so the next run tries again.
+// table, so the next run tries again. Runs across every stream on purpose
+// (disk hygiene): no stream filter, and no per-stream on/off flag.
 export async function cleanupCaptures(supabase: Supabase, now: Date = new Date()) {
   const config = captureConfig();
   if (!config) return { ok: false, message: "Captures not configured.", deleted: 0, mediaRemoved: 0, vpsDown: false };

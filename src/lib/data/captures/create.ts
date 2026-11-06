@@ -1,5 +1,5 @@
 import type { createServiceRoleClient } from "@/lib/supabase/server";
-import { STREAM_ID } from "@/config/constants";
+import type { PollStream } from "@/lib/data/streams";
 import {
   ADMIN_CLIP_SECONDS,
   ADMIN_TTL_MS,
@@ -59,11 +59,22 @@ export function parseCaptureInput(body: unknown, createdBy: "admin" | "visitor")
   return { kind: "clip", seconds: b.seconds, reportedDelay: b.behind_live_seconds };
 }
 
+// The capture belongs to the stream asked for: its row carries the stream's
+// id, and the capture service is asked for that stream's capture_key (the
+// rewind buffer capture-buffer@<key>; the frog stream's key is 'main'). A
+// stream with no capture_key, or switched off, is refused before anything is
+// counted or stored.
+//
+// The pause switch, the per-visitor limits, the site-wide hourly limits and
+// the storage budget are all site-wide on purpose: they protect the one VPS
+// every stream shares, so they count captures on every stream.
 export async function createCapture(
   supabase: Supabase,
+  stream: PollStream,
   input: CaptureRequest,
   now: Date = new Date(),
 ): Promise<{ status: number; body: { capture: PublicCapture } | { error: string } }> {
+  if (!stream.is_active || !stream.capture_key) return { status: 409, body: { error: MESSAGES.notOnStream } };
   const config = captureConfig();
   if (!config) return { status: 503, body: { error: MESSAGES.unavailable } };
 
@@ -85,7 +96,7 @@ export async function createCapture(
   // the reply from the VPS is lost.
   const inserted = await supabase.from("captures").insert({
     id,
-    stream_id: STREAM_ID,
+    stream_id: stream.id,
     kind: input.kind,
     created_by: input.createdBy,
     requester_hash: hash,
@@ -104,7 +115,7 @@ export async function createCapture(
   }
 
   const reply = await callService(config, "POST", "/capture", {
-    stream: STREAM_ID,
+    stream: stream.capture_key,
     kind: input.kind,
     seconds: input.seconds,
     behind_live_seconds: delay,

@@ -1,4 +1,5 @@
 import type { createServiceRoleClient } from "@/lib/supabase/server";
+import type { StreamId } from "@/lib/data/streams";
 import { parseExternalVideoUrl, type ExternalEmbed } from "@/lib/data/captures/rules";
 import { captureConfig, mediaUrls, thumbUrl, type CaptureRow } from "@/lib/data/captures/core";
 
@@ -19,14 +20,15 @@ export type GalleryItem = {
 
 export const GALLERY_LIMIT = 60;
 
-// Featured captures, newest featured first. Only what the page shows: no
-// hashes, no expiry, nothing about who made it.
-export async function loadGallery(supabase: Supabase): Promise<GalleryItem[]> {
+// The stream's featured captures, newest featured first. Only what the page
+// shows: no hashes, no expiry, nothing about who made it.
+export async function loadGallery(supabase: Supabase, streamId: StreamId): Promise<GalleryItem[]> {
   const config = captureConfig();
   if (!config) return [];
   const { data, error } = await supabase
     .from("captures")
     .select("id, kind, seconds, file_name, thumb_name, featured_at, external_url, status")
+    .eq("stream_id", streamId)
     .eq("featured", true)
     .eq("status", "ready")
     .order("featured_at", { ascending: false })

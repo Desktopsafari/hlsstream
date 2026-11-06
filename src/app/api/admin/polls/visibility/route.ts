@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { setPollHidden } from "@/lib/data/polls";
+import { resolveStream, streamRefFrom } from "@/lib/data/streams";
 
 // "Hide from site" / "Show on site" for a closed poll. Never deletes anything.
 export async function POST(request: Request) {
@@ -11,7 +12,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Need a pollId and an action (hide or show)." }, { status: 400 });
   }
 
-  const result = await setPollHidden(createServiceRoleClient(), pollId, action === "hide");
+  const supabase = createServiceRoleClient();
+  const found = await resolveStream(supabase, streamRefFrom(request, body));
+  if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status });
+
+  const result = await setPollHidden(supabase, found.stream.id, pollId, action === "hide");
   if (!result.ok) {
     return NextResponse.json({ error: result.error, code: result.code }, { status: result.status });
   }

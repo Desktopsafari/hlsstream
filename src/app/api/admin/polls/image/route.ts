@@ -9,6 +9,7 @@ import {
   setPollImage,
   uploadPendingImage,
 } from "@/lib/data/polls";
+import { resolveStream, streamRefFrom } from "@/lib/data/streams";
 
 // The picture above a poll's question. With a pollId the picture goes straight
 // onto that poll (allowed whenever the question text could be edited: queued or
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
 
   const result =
     typeof pollId === "string" && pollId
-      ? await setPollImage(supabase, pollId, file)
+      ? await setPollImageInStream(supabase, request, formData, pollId, file)
       : await uploadPendingImage(supabase, file);
 
   if (!result.ok) {
@@ -47,7 +48,9 @@ export async function DELETE(request: Request) {
   const supabase = createServiceRoleClient();
 
   if (pollId) {
-    const result = await clearPollImage(supabase, pollId);
+    const found = await resolveStream(supabase, streamRefFrom(request));
+    if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status });
+    const result = await clearPollImage(supabase, found.stream.id, pollId);
     if (!result.ok) {
       return NextResponse.json({ error: result.error, code: result.code }, { status: result.status });
     }
@@ -60,4 +63,18 @@ export async function DELETE(request: Request) {
   }
 
   return NextResponse.json({ error: "Need a pollId or a pending picture path." }, { status: 400 });
+}
+
+// A picture for an existing poll: only a poll of the stream named in the form
+// (`stream_id`) or the URL, the frog stream when neither is given.
+async function setPollImageInStream(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  request: Request,
+  formData: FormData | null,
+  pollId: string,
+  file: File,
+) {
+  const found = await resolveStream(supabase, streamRefFrom(request, formData ?? undefined));
+  if (!found.ok) return { ok: false as const, status: found.status, error: found.error, code: undefined };
+  return setPollImage(supabase, found.stream.id, pollId, file);
 }

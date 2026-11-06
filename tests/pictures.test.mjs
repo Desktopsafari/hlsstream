@@ -102,9 +102,9 @@ test("repeating polls carry the picture forward; files shared by two polls are n
   const A = db().addPoll({ question: "TEST A", image_path: "polls/shared/question-1.png" });
   const B = db().addPoll({ question: "TEST B", image_path: "polls/shared/question-1.png" });
   db().addOption(B.id, "x", 0);
-  await admin.deletePollWithFiles(db(), B.id);
+  await admin.deletePollWithFiles(db(), "main", B.id);
   check("deleting poll B keeps the file poll A uses", db().fileExists(BUCKET, "polls/shared/question-1.png"));
-  await admin.deletePollWithFiles(db(), A.id);
+  await admin.deletePollWithFiles(db(), "main", A.id);
   check("deleting the last user removes it", !db().fileExists(BUCKET, "polls/shared/question-1.png"));
 });
 
@@ -148,7 +148,7 @@ test("public and admin APIs: the poll's picture URL; everything works without th
   db().addOption(P.id, "B", 1);
   const pub = await publicPoll(new Date());
   check("poll gets its URL; options have no picture fields", pub.body.poll.image_url === "https://example.supabase.co/storage/v1/object/public/event-images/polls/pub/question-1.png" && pub.body.options.every((o) => !("image_url" in o)));
-  const adm = await json(await (await routes.polls()).GET());
+  const adm = await json(await (await routes.polls()).GET(req("GET", "/api/admin/polls")));
   check("admin list: imagesSupported and image_url", adm.body.imagesSupported === true && adm.body.polls[0].image_url.endsWith("polls/pub/question-1.png"));
 
   await fresh({ imageColumn: false });
@@ -157,7 +157,7 @@ test("public and admin APIs: the poll's picture URL; everything works without th
   db().addOption(P2.id, "B", 1);
   const pub2 = await publicPoll(new Date());
   check("WITHOUT the column: the public API works, no picture", pub2.status === 200 && pub2.body.options.length === 2 && pub2.body.poll.image_url === null);
-  const adm2 = await json(await (await routes.polls()).GET());
+  const adm2 = await json(await (await routes.polls()).GET(req("GET", "/api/admin/polls")));
   check("WITHOUT the column: admin list works, imagesSupported=false", adm2.status === 200 && adm2.body.imagesSupported === false);
   const up = await upload(png());
   check("WITHOUT the column: an upload says to run the SQL", up.status === 400 && /poll_question_image\.sql/.test(up.body.error));

@@ -4,6 +4,7 @@ import { isDailyColumns } from "@/lib/pollDuration";
 import { continueRepeatingPoll, resumePausedRepeatingPoll } from "@/lib/data/polls/repeat";
 import { getPollState, isLongPoll, type PollTiming } from "@/lib/pollSchedule";
 import { loadPollDuration } from "@/lib/data/polls/timing";
+import type { StreamId } from "@/lib/data/streams";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 
@@ -30,8 +31,12 @@ export type CloseOutcome =
 // that is replaced is marked paused instead of queueing its next copy, and it
 // resumes when the long poll closes. Closing a long poll resumes a daily poll
 // that was waiting on it (resumePausedRepeatingPoll).
+//
+// Only acts on a poll of the given stream (the flip is filtered by stream_id),
+// and the repeat copy is queued on that same stream.
 export async function closePollAndFinish(
   supabase: Supabase,
+  streamId: StreamId,
   poll: { id: string; question: string; repeat_daily: boolean },
   deps: LifecycleDeps = {},
   opts: { repeatMode?: "normal" | "pause" } = {},
@@ -40,6 +45,7 @@ export async function closePollAndFinish(
     .from("polls")
     .update({ status: "closed", closes_at: new Date().toISOString() })
     .eq("id", poll.id)
+    .eq("stream_id", streamId)
     .eq("status", "open")
     .select("id");
 
@@ -59,16 +65,16 @@ export async function closePollAndFinish(
   let repeatMessage = "";
   if (poll.repeat_daily) {
     if (opts.repeatMode === "pause") {
-      await supabase.from("polls").update({ repeat_paused: true }).eq("id", poll.id);
+      await supabase.from("polls").update({ repeat_paused: true }).eq("id", poll.id).eq("stream_id", streamId);
       repeatMessage = " Its daily repeat is paused and resumes when the long poll closes.";
     } else {
-      repeatMessage = await continueRepeatingPoll(supabase, poll.id, poll.question);
+      repeatMessage = await continueRepeatingPoll(supabase, streamId, poll.id, poll.question);
     }
   }
 
   const { cols, opens_at } = await loadPollDuration(supabase, poll.id);
   if (!isDailyColumns(cols) && opens_at) {
-    repeatMessage += await resumePausedRepeatingPoll(supabase, poll.id, opens_at);
+    repeatMessage += await resumePausedRepeatingPoll(supabase, streamId, poll.id, opens_at);
   }
   return { state: "closed", repeatMessage };
 }
@@ -93,6 +99,7 @@ export function isDueForJob(
 // returns the text the job adds to its response.
 export async function closeDuePolls(
   supabase: Supabase,
+  streamId: StreamId,
   polls: ({ id: string; question: string; repeat_daily: boolean; status: string } & PollTiming)[],
   job: CronJob,
   deps: LifecycleDeps = {},
@@ -100,7 +107,7 @@ export async function closeDuePolls(
   let message = "";
   for (const p of polls) {
     if (!isDueForJob(p, job)) continue;
-    const outcome = await closePollAndFinish(supabase, p, deps);
+    const outcome = await closePollAndFinish(supabase, streamId, p, deps);
     if (outcome.state === "closed") {
       message += ` Closed the ended poll "${p.question}" and emailed its results.${outcome.repeatMessage}`;
     }

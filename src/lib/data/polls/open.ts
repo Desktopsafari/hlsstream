@@ -17,6 +17,7 @@ import {
   getPollState,
 } from "@/lib/pollSchedule";
 import { loadPollDuration, timingSelect } from "@/lib/data/polls/timing";
+import type { StreamId } from "@/lib/data/streams";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 
@@ -38,10 +39,11 @@ const SIMULTANEOUS_MS = 10_000;
 // Open now
 // ---------------------------------------------------------------------------
 
-async function listOpenPolls(supabase: Supabase): Promise<OpenPollRow[]> {
+async function listOpenPolls(supabase: Supabase, streamId: StreamId): Promise<OpenPollRow[]> {
   const { data } = await supabase
     .from("polls")
     .select(`id, question, status, repeat_daily, opens_at${await timingSelect(supabase)}`)
+    .eq("stream_id", streamId)
     .eq("status", "open")
     .order("opens_at", { ascending: false });
   return (data ?? []) as unknown as OpenPollRow[];
@@ -86,6 +88,7 @@ async function targetDuration(
   supabase: Supabase,
   opts: { pollId?: string; duration?: DurationColumns | null },
 ): Promise<DurationColumns> {
+  // The caller has checked opts.pollId belongs to the stream.
   if (opts.pollId) return (await loadPollDuration(supabase, opts.pollId)).cols;
   return opts.duration ?? DAILY_COLUMNS;
 }
@@ -93,6 +96,7 @@ async function targetDuration(
 // Everything the admin needs to see before confirming "Open now".
 export async function getOpenNowInfo(
   supabase: Supabase,
+  streamId: StreamId,
   opts: { pollId?: string; duration?: DurationColumns | null; now?: Date } = {},
 ): Promise<OpenNowInfo> {
   const now = opts.now ?? new Date();
@@ -101,12 +105,13 @@ export async function getOpenNowInfo(
   const long = !isDailyColumns(cols);
   const end = long ? endForColumns(cols, now) : null;
 
-  const open = await listOpenPolls(supabase);
+  const open = await listOpenPolls(supabase, streamId);
   const live = open.filter((p) => getPollState(p, now).votingOpen);
 
   const { data: scheduled } = await supabase
     .from("polls")
     .select("id, question")
+    .eq("stream_id", streamId)
     .eq("status", "scheduled")
     .order("created_at", { ascending: true });
   const queued = ((scheduled ?? []) as { id: string; question: string }[]).find((p) => p.id !== opts.pollId) ?? null;
@@ -188,6 +193,7 @@ export type OpenQueuedOutcome = { state: "opened" } | { state: "not_scheduled" }
 // caller gets there first opens it and the other sees "not_scheduled".
 export async function openQueuedPoll(
   supabase: Supabase,
+  streamId: StreamId,
   pollId: string,
   opts: { now: Date; endsAt?: string | null },
 ): Promise<OpenQueuedOutcome> {
@@ -199,6 +205,7 @@ export async function openQueuedPoll(
       ...(opts.endsAt ? { ends_at: opts.endsAt } : {}),
     })
     .eq("id", pollId)
+    .eq("stream_id", streamId)
     .eq("status", "scheduled")
     .select("id");
   if (error) return { state: "error", error: error.message };
@@ -207,11 +214,12 @@ export async function openQueuedPoll(
 }
 
 // Puts a poll back in the queue (used when an Open now has to back out).
-function revertQueuedOpen(supabase: Supabase, pollId: string, clearEnd: boolean) {
+function revertQueuedOpen(supabase: Supabase, streamId: StreamId, pollId: string, clearEnd: boolean) {
   return supabase
     .from("polls")
     .update({ status: "scheduled", ...(clearEnd ? { ends_at: null } : {}) })
     .eq("id", pollId)
+    .eq("stream_id", streamId)
     .eq("status", "open");
 }
 
@@ -225,7 +233,8 @@ function revertQueuedOpen(supabase: Supabase, pollId: string, clearEnd: boolean)
 // it is still 'scheduled', so two clicks on the same poll open it once. A
 // second, different poll that opens at the same moment is detected after the
 // claim and this call backs out, so the worst case is that neither opens and
-// the admin retries -- never two open polls.
+// the admin retries -- never two open polls on one stream. Other streams are
+// never looked at: each stream has its own one open poll.
 //
 // Replacing: an already-open poll is only replaced with confirmReplace. It is
 // closed through closePollAndFinish, the same path the crons use, so its votes
@@ -234,6 +243,7 @@ function revertQueuedOpen(supabase: Supabase, pollId: string, clearEnd: boolean)
 // the repeating poll is paused and resumes when the long poll closes.
 export async function openPollNow(
   supabase: Supabase,
+  streamId: StreamId,
   input: { pollId: string; confirmReplace: boolean; now?: Date },
   deps: LifecycleDeps = {},
 ): Promise<OpenNowResult> {
@@ -244,6 +254,7 @@ export async function openPollNow(
     .from("polls")
     .select("id, question, status")
     .eq("id", input.pollId)
+    .eq("stream_id", streamId)
     .maybeSingle();
   if (!target) return fail(404, "not_found", "Poll not found.");
   if (target.status !== "scheduled") {
@@ -271,7 +282,7 @@ export async function openPollNow(
     if (cols.duration_days) endsAtOnOpen = getDaysPollEnd(now, cols.duration_days).toISOString();
   }
 
-  const before = await listOpenPolls(supabase);
+  const before = await listOpenPolls(supabase, streamId);
   const nowMs = now.getTime();
   const isRecent = (p: OpenPollRow) => Math.abs(nowMs - Date.parse(p.opens_at)) < SIMULTANEOUS_MS;
   if (before.some(isRecent)) {
@@ -287,7 +298,7 @@ export async function openPollNow(
     );
   }
 
-  const claim = await openQueuedPoll(supabase, target.id, { now, endsAt: endsAtOnOpen });
+  const claim = await openQueuedPoll(supabase, streamId, target.id, { now, endsAt: endsAtOnOpen });
   if (claim.state === "error") {
     console.error("Failed to open poll now:", claim.error);
     return fail(500, "db_error", "Failed to open the poll.");
@@ -296,10 +307,10 @@ export async function openPollNow(
     return fail(409, "not_scheduled", "That poll was just opened or removed by something else.");
   }
 
-  const revert = () => revertQueuedOpen(supabase, target.id, endsAtOnOpen !== null);
+  const revert = () => revertQueuedOpen(supabase, streamId, target.id, endsAtOnOpen !== null);
 
   const knownIds = new Set(before.map((p) => p.id));
-  const after = await listOpenPolls(supabase);
+  const after = await listOpenPolls(supabase, streamId);
   const rivals = after.filter((p) => p.id !== target.id && !knownIds.has(p.id) && isRecent(p));
   if (rivals.length > 0) {
     await revert();
@@ -312,7 +323,7 @@ export async function openPollNow(
 
   const closed: { id: string; question: string; repeatMessage: string }[] = [];
   for (const old of before) {
-    const outcome = await closePollAndFinish(supabase, old, deps, { repeatMode: long ? "pause" : "normal" });
+    const outcome = await closePollAndFinish(supabase, streamId, old, deps, { repeatMode: long ? "pause" : "normal" });
     if (outcome.state === "error") {
       await revert();
       return fail(500, "db_error", "Couldn't close the poll that was open, so nothing was changed.");

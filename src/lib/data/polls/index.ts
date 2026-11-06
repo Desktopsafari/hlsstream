@@ -11,6 +11,7 @@ export {
   deletePollWithFiles,
   parseNewOptions,
   parsePendingImage,
+  POLLS_OFF_ERROR,
 } from "@/lib/data/polls/admin";
 export { closeDuePolls, closePollAndFinish, isDueForJob, type CloseOutcome, type CronJob, type LifecycleDeps } from "@/lib/data/polls/close";
 export { runClosePollJob, runOpenPollJob, type JobResponse } from "@/lib/data/polls/cron";
@@ -28,7 +29,7 @@ export {
   setPollImage,
   uploadPendingImage,
 } from "@/lib/data/polls/images";
-export { closePollNow, editPoll, hasScheduledPoll, listAdminPolls, setPollEndTime, type AdminResult } from "@/lib/data/polls/manage";
+export { closePollNow, editPoll, hasScheduledPoll, listAdminPolls, pollInStream, setPollEndTime, type AdminResult } from "@/lib/data/polls/manage";
 export {
   endsAtForOpening,
   getOpenNowInfo,
@@ -38,7 +39,7 @@ export {
   type OpenNowResult,
   type RepeatOutcome,
 } from "@/lib/data/polls/open";
-export { getPublicPollPayload } from "@/lib/data/polls/public";
+export { getPublicPollPayload, hasPublicPoll } from "@/lib/data/polls/public";
 export { continueRepeatingPoll, resumePausedRepeatingPoll } from "@/lib/data/polls/repeat";
 export { durationColumnsExist, loadPollDuration } from "@/lib/data/polls/timing";
 export { unlinkOldVotes, VOTE_LINK_RETENTION_DAYS } from "@/lib/data/polls/unlink";

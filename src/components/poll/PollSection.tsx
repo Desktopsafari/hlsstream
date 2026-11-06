@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { getPublicPoll } from "@/lib/data/polls";
+import { hasPublicPoll } from "@/lib/data/polls";
+import { resolveStream } from "@/lib/data/streams";
 import PollCard from "./PollCard";
 
 // Don't let a slow database hold the page up: fall back to rendering the card
@@ -14,8 +15,10 @@ export default async function PollSection() {
   await connection();
   let initialVisible = true;
   try {
+    const supabase = createServiceRoleClient();
     initialVisible = await Promise.race([
-      getPublicPoll(createServiceRoleClient()).then((r) => r.poll !== null),
+      // The frog stream until stream pages pass their own stream in.
+      resolveStream(supabase, null).then((found) => (found.ok ? hasPublicPoll(supabase, found.stream) : true)),
       new Promise<boolean>((resolve) => setTimeout(() => resolve(true), SERVER_WAIT_MS)),
     ]);
   } catch {

@@ -11,7 +11,8 @@ const UNLINKED_PREFIX = "anon-";
 const BATCH_SIZE = 500;
 const MAX_BATCHES = 40;
 
-// Safe to run repeatedly: rows already unlinked (anon-...) are skipped.
+// Safe to run repeatedly: rows already unlinked (anon-...) are skipped. Covers
+// every stream's polls on purpose: the retention rule is the same everywhere.
 export async function unlinkOldVotes(): Promise<{ unlinked: number; error?: string }> {
   const supabase = createServiceRoleClient();
   const cutoff = new Date(Date.now() - VOTE_LINK_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();

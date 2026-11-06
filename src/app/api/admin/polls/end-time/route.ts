@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { setPollEndTime } from "@/lib/data/polls";
+import { resolveStream, streamRefFrom } from "@/lib/data/streams";
 import { emailNoteFor } from "@/lib/pollDuration";
 import { formatEasternDay, parseEasternDateTime } from "@/lib/pollSchedule";
 
@@ -26,7 +27,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = await setPollEndTime(createServiceRoleClient(), pollId, end);
+  const supabase = createServiceRoleClient();
+  const found = await resolveStream(supabase, streamRefFrom(request, body));
+  if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status });
+
+  const result = await setPollEndTime(supabase, found.stream.id, pollId, end);
   if (!result.ok) {
     return NextResponse.json({ error: result.error, code: result.code }, { status: result.status });
   }

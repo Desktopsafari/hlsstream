@@ -7,7 +7,10 @@ import {
   openPollNow,
   parseNewOptions,
   parsePendingImage,
+  pollInStream,
+  POLLS_OFF_ERROR,
 } from "@/lib/data/polls";
+import { resolveStream, streamRefFrom } from "@/lib/data/streams";
 import { isDailyColumns, resolveDuration, type DurationColumns } from "@/lib/pollDuration";
 
 // What the admin sees before confirming "Open now": how long voting would run,
@@ -30,16 +33,27 @@ export async function GET(request: Request) {
     }
   }
   const supabase = createServiceRoleClient();
-  return NextResponse.json(await getOpenNowInfo(supabase, { pollId, duration }));
+  const found = await resolveStream(supabase, streamRefFrom(request));
+  if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status });
+  if (pollId && !(await pollInStream(supabase, found.stream.id, pollId))) {
+    return NextResponse.json({ error: "Poll not found." }, { status: 404 });
+  }
+  return NextResponse.json(await getOpenNowInfo(supabase, found.stream.id, { pollId, duration }));
 }
 
 // Opens a poll right now. Body is either { pollId } (a poll waiting in the
 // queue) or { question, options, repeatDaily, duration } (a new poll from the
-// form), plus confirmReplace: true to close an already-open poll.
+// form), plus confirmReplace: true to close an already-open poll. Only on the
+// stream named by `stream_id` (the frog stream when missing), and never on a
+// stream with polls turned off.
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const confirmReplace = body?.confirmReplace === true;
   const supabase = createServiceRoleClient();
+  const found = await resolveStream(supabase, streamRefFrom(request, body));
+  if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status });
+  const stream = found.stream;
+  if (!stream.polls_enabled) return NextResponse.json({ error: POLLS_OFF_ERROR }, { status: 409 });
 
   let pollId: string | null = typeof body?.pollId === "string" && body.pollId ? body.pollId : null;
   let createdHere = false;
@@ -70,7 +84,7 @@ export async function POST(request: Request) {
     }
 
     // Refuse before creating anything if it can't go live anyway.
-    const info = await getOpenNowInfo(supabase, { duration: resolved.columns });
+    const info = await getOpenNowInfo(supabase, stream.id, { duration: resolved.columns });
     if (!info.allowed) {
       return NextResponse.json({ error: info.message, code: "past_cutoff" }, { status: 409 });
     }
@@ -81,7 +95,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const created = await createPollWithOptions(supabase, {
+    const created = await createPollWithOptions(supabase, stream, {
       question,
       options,
       repeatDaily: body?.repeatDaily === true,
@@ -95,10 +109,10 @@ export async function POST(request: Request) {
     createdHere = true;
   }
 
-  const result = await openPollNow(supabase, { pollId, confirmReplace });
+  const result = await openPollNow(supabase, stream.id, { pollId, confirmReplace });
   if (!result.ok) {
     // A poll made just for this request shouldn't be left behind in the queue.
-    if (createdHere) await deletePollWithFiles(supabase, pollId);
+    if (createdHere) await deletePollWithFiles(supabase, stream.id, pollId);
     return NextResponse.json({ error: result.error, code: result.code }, { status: result.status });
   }
   return NextResponse.json(result);

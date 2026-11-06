@@ -9,6 +9,7 @@ import {
   loadPollImagePaths,
   removeFileIfUnreferenced,
 } from "@/lib/data/polls/images";
+import type { PollStream, StreamId } from "@/lib/data/streams";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 
@@ -30,15 +31,19 @@ export function parsePendingImage(input: unknown): string | null | undefined {
   return isPendingPath(input) ? input : undefined;
 }
 
+export const POLLS_OFF_ERROR = "Polls are turned off for this stream.";
+
 type CreatePollResult =
   | { ok: true; pollId: string }
   | { ok: false; status: number; error: string };
 
 // Creates a queued (scheduled) poll with its options and optional picture.
 // Shared by "Queue poll" and "Open now" from the form. Nothing is left
-// half-made: if any step fails the poll is removed again.
+// half-made: if any step fails the poll is removed again. The poll is created
+// on the given stream, and refused if that stream has polls turned off.
 export async function createPollWithOptions(
   supabase: Supabase,
+  stream: PollStream,
   input: {
     question: string;
     options: string[];
@@ -47,6 +52,7 @@ export async function createPollWithOptions(
     duration?: DurationColumns;
   },
 ): Promise<CreatePollResult> {
+  if (!stream.polls_enabled) return { ok: false, status: 409, error: POLLS_OFF_ERROR };
   if (input.imagePath && !(await imagesSupported(supabase))) {
     return { ok: false, status: 400, error: IMAGES_SQL_HINT };
   }
@@ -59,6 +65,7 @@ export async function createPollWithOptions(
   const { data: poll, error: pollError } = await supabase
     .from("polls")
     .insert({
+      stream_id: stream.id,
       question: input.question.trim(),
       status: "scheduled",
       repeat_daily: input.repeatDaily,
@@ -84,14 +91,14 @@ export async function createPollWithOptions(
   );
 
   if (optionsError) {
-    await deletePollWithFiles(supabase, poll.id);
+    await deletePollWithFiles(supabase, stream.id, poll.id);
     return { ok: false, status: 500, error: optionsError.message };
   }
 
   if (input.imagePath) {
-    const attached = await attachPendingImage(supabase, poll.id, input.imagePath);
+    const attached = await attachPendingImage(supabase, stream.id, poll.id, input.imagePath);
     if (!attached.ok) {
-      await deletePollWithFiles(supabase, poll.id);
+      await deletePollWithFiles(supabase, stream.id, poll.id);
       return { ok: false, status: attached.status, error: attached.error };
     }
   }
@@ -100,10 +107,12 @@ export async function createPollWithOptions(
 }
 
 // Removes a poll that never went live (cascade removes its options) plus its
-// picture file if no other poll uses it.
-export async function deletePollWithFiles(supabase: Supabase, pollId: string): Promise<void> {
+// picture file if no other poll uses it. Only a poll of the given stream.
+export async function deletePollWithFiles(supabase: Supabase, streamId: StreamId, pollId: string): Promise<void> {
+  const { data: owned } = await supabase.from("polls").select("id").eq("id", pollId).eq("stream_id", streamId).maybeSingle();
+  if (!owned) return;
   const paths = await loadPollImagePaths(supabase, [pollId]);
-  await supabase.from("polls").delete().eq("id", pollId);
+  await supabase.from("polls").delete().eq("id", pollId).eq("stream_id", streamId);
   const path = paths?.get(pollId);
   if (path) await removeFileIfUnreferenced(supabase, path);
 }

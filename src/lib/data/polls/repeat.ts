@@ -1,4 +1,5 @@
 import type { createServiceRoleClient } from "@/lib/supabase/server";
+import type { StreamId } from "@/lib/data/streams";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 
@@ -13,8 +14,9 @@ async function pollPictureForCopy(supabase: Supabase, pollId: string): Promise<s
   return (data as { image_path: string | null } | null)?.image_path ?? null;
 }
 
-// Runs after a repeat_daily poll closes. Mirrors the same "only one poll
-// scheduled at a time" rule the admin create endpoint enforces: if the
+// Runs after a repeat_daily poll closes. The copy is queued on the closed
+// poll's stream (streamId is the stream the poll was closed in). Mirrors the
+// same "only one poll scheduled at a time, per stream" rule the admin create endpoint enforces: if the
 // admin already manually queued a different poll for the next cycle (which
 // can only have happened while this poll was still open, since a poll
 // can't be queued once one is already scheduled), that manual choice wins.
@@ -26,18 +28,20 @@ async function pollPictureForCopy(supabase: Supabase, pollId: string): Promise<s
 // (see removeFileIfUnreferenced in images.ts).
 export async function continueRepeatingPoll(
   supabase: Supabase,
+  streamId: StreamId,
   closedPollId: string,
   question: string,
 ): Promise<string> {
   const { data: existingScheduled } = await supabase
     .from("polls")
     .select("id")
+    .eq("stream_id", streamId)
     .eq("status", "scheduled")
     .limit(1)
     .maybeSingle();
 
   if (existingScheduled) {
-    await supabase.from("polls").update({ repeat_paused: true }).eq("id", closedPollId);
+    await supabase.from("polls").update({ repeat_paused: true }).eq("id", closedPollId).eq("stream_id", streamId);
     return " A different poll was already queued for the next cycle, so the repeat was paused.";
   }
 
@@ -52,6 +56,7 @@ export async function continueRepeatingPoll(
   const { data: nextPoll, error: insertError } = await supabase
     .from("polls")
     .insert({
+      stream_id: streamId,
       question,
       status: "scheduled",
       repeat_daily: true,
@@ -95,6 +100,7 @@ export async function continueRepeatingPoll(
 // queue wins" rule as at any other time.
 export async function resumePausedRepeatingPoll(
   supabase: Supabase,
+  streamId: StreamId,
   longPollId: string,
   longPollOpenedAt: string,
 ): Promise<string> {
@@ -102,6 +108,7 @@ export async function resumePausedRepeatingPoll(
   const { data: prev } = await supabase
     .from("polls")
     .select("id, question, repeat_daily, repeat_paused")
+    .eq("stream_id", streamId)
     .eq("status", "closed")
     .neq("id", longPollId)
     .lte("closes_at", before)
@@ -112,11 +119,17 @@ export async function resumePausedRepeatingPoll(
   const paused = prev as { id: string; question: string; repeat_daily: boolean; repeat_paused: boolean } | null;
   if (!paused || !paused.repeat_daily || !paused.repeat_paused) return "";
 
-  const { data: queued } = await supabase.from("polls").select("id").eq("status", "scheduled").limit(1).maybeSingle();
+  const { data: queued } = await supabase
+    .from("polls")
+    .select("id")
+    .eq("stream_id", streamId)
+    .eq("status", "scheduled")
+    .limit(1)
+    .maybeSingle();
   if (queued) return " A different poll is queued, so the paused daily poll stays paused.";
 
-  const message = await continueRepeatingPoll(supabase, paused.id, paused.question);
+  const message = await continueRepeatingPoll(supabase, streamId, paused.id, paused.question);
   if (!/Queued/.test(message)) return message;
-  await supabase.from("polls").update({ repeat_paused: false }).eq("id", paused.id);
+  await supabase.from("polls").update({ repeat_paused: false }).eq("id", paused.id).eq("stream_id", streamId);
   return " The paused daily poll was queued to resume.";
 }

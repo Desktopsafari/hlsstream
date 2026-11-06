@@ -3,6 +3,7 @@ import { getPollState } from "@/lib/pollSchedule";
 import { loadPollImagePaths, pollImageUrl } from "@/lib/data/polls/images";
 import { getPublicPoll } from "@/lib/data/polls/visibility";
 import { findSessionVote, loadPollResults } from "@/lib/data/polls/votes";
+import type { PollStream } from "@/lib/data/streams";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 
@@ -11,10 +12,12 @@ type Supabase = ReturnType<typeof createServiceRoleClient>;
 // Prefer the currently open poll; otherwise show the most recently closed one
 // (so results stay visible until the next poll opens) -- unless it's hidden
 // from the site, by hand or by the auto-hide timer. A hidden poll's content is
-// never sent.
-export async function getPublicPollPayload(supabase: Supabase, sessionId: string | null) {
-  const { poll, hideAt } = await getPublicPoll(supabase);
+// never sent. Only the given stream's polls are looked at, and a stream with
+// polls turned off has no poll at all.
+export async function getPublicPollPayload(supabase: Supabase, stream: PollStream, sessionId: string | null) {
   const serverTime = new Date().toISOString();
+  if (!stream.polls_enabled) return { poll: null, serverTime };
+  const { poll, hideAt } = await getPublicPoll(supabase, stream.id);
 
   if (!poll) return { poll: null, serverTime };
 
@@ -44,4 +47,11 @@ export async function getPublicPollPayload(supabase: Supabase, sessionId: string
     hideAt: hideAt?.toISOString() ?? null,
     serverTime,
   };
+}
+
+// Whether the stream's poll card has anything to show right now (the server
+// part of the card uses this so a hidden or missing poll is never in the HTML).
+export async function hasPublicPoll(supabase: Supabase, stream: PollStream): Promise<boolean> {
+  if (!stream.polls_enabled) return false;
+  return (await getPublicPoll(supabase, stream.id)).poll !== null;
 }

@@ -7,12 +7,21 @@ import {
   listAdminPolls,
   parseNewOptions,
   parsePendingImage,
+  POLLS_OFF_ERROR,
 } from "@/lib/data/polls";
 import { isDailyColumns, resolveDuration } from "@/lib/pollDuration";
 import { getNextNoon } from "@/lib/pollSchedule";
+import { resolveStream, streamRefFrom } from "@/lib/data/streams";
 
-export async function GET() {
-  const result = await listAdminPolls(createServiceRoleClient());
+// Every handler works on one stream: `stream_id` in the body or `?stream=` in
+// the URL (slug or id), the frog stream when neither is given. An unknown
+// stream is refused, and a poll id from another stream is "Poll not found."
+
+export async function GET(request: Request) {
+  const supabase = createServiceRoleClient();
+  const found = await resolveStream(supabase, streamRefFrom(request));
+  if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status });
+  const result = await listAdminPolls(supabase, found.stream.id);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json(result.body);
 }
@@ -48,15 +57,19 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceRoleClient();
+  const found = await resolveStream(supabase, streamRefFrom(request, body));
+  if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status });
+  const stream = found.stream;
+  if (!stream.polls_enabled) return NextResponse.json({ error: POLLS_OFF_ERROR }, { status: 409 });
 
-  if (await hasScheduledPoll(supabase)) {
+  if (await hasScheduledPoll(supabase, stream.id)) {
     return NextResponse.json(
       { error: "There's already a scheduled poll queued up. Wait for it to open, or delete it first." },
       { status: 409 },
     );
   }
 
-  const created = await createPollWithOptions(supabase, {
+  const created = await createPollWithOptions(supabase, stream, {
     question,
     options,
     repeatDaily,
@@ -83,7 +96,11 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "The question can't be empty." }, { status: 400 });
   }
 
-  const result = await editPoll(createServiceRoleClient(), {
+  const supabase = createServiceRoleClient();
+  const found = await resolveStream(supabase, streamRefFrom(request, body));
+  if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status });
+
+  const result = await editPoll(supabase, found.stream.id, {
     pollId,
     question,
     options: body?.options,

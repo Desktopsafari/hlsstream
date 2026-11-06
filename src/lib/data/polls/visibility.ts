@@ -1,6 +1,7 @@
 import type { createServiceRoleClient } from "@/lib/supabase/server";
 import { getPollEnd, getPollState, type PollTiming } from "@/lib/pollSchedule";
 import { timingSelect } from "@/lib/data/polls/timing";
+import type { StreamId } from "@/lib/data/streams";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 
@@ -124,9 +125,10 @@ export type PublicPollRow = { id: string; question: string; status: string; open
 // The open poll if there is one, otherwise the most recently closed one --
 // unless that one is hidden, in which case there is no poll card at all (an
 // older poll is never shown in its place). Hidden polls' content never leaves
-// the server.
+// the server. Only the given stream's polls are looked at.
 export async function getPublicPoll(
   supabase: Supabase,
+  streamId: StreamId,
   now: Date = new Date(),
 ): Promise<{ poll: PublicPollRow | null; hideAt: Date | null }> {
   const timing = await timingSelect(supabase);
@@ -136,6 +138,7 @@ export async function getPublicPoll(
   const { data: openRow } = await supabase
     .from("polls")
     .select(cols)
+    .eq("stream_id", streamId)
     .eq("status", "open")
     .order("opens_at", { ascending: false })
     .limit(1)
@@ -148,6 +151,7 @@ export async function getPublicPoll(
       await supabase
         .from("polls")
         .select(cols)
+        .eq("stream_id", streamId)
         .eq("status", "closed")
         .order("closes_at", { ascending: false })
         .limit(1)
@@ -174,11 +178,16 @@ export type HideResult = { ok: true; message: string } | { ok: false; status: nu
 // "Hide from site" / "Show on site" on a closed poll. Both are conditional
 // updates, so a double click (or two tabs) can't stack up: hiding only sets
 // hidden_at if it isn't already set, so the first click's timestamp stays.
-export async function setPollHidden(supabase: Supabase, pollId: string, hide: boolean): Promise<HideResult> {
+export async function setPollHidden(supabase: Supabase, streamId: StreamId, pollId: string, hide: boolean): Promise<HideResult> {
   if (!(await hideColumnsExist(supabase))) {
     return { ok: false, status: 400, code: "hide_unsupported", error: HIDE_SQL_HINT };
   }
-  const { data: poll } = await supabase.from("polls").select("id, status, hidden_at").eq("id", pollId).maybeSingle();
+  const { data: poll } = await supabase
+    .from("polls")
+    .select("id, status, hidden_at")
+    .eq("id", pollId)
+    .eq("stream_id", streamId)
+    .maybeSingle();
   if (!poll) return { ok: false, status: 404, error: "Poll not found." };
   if (poll.status !== "closed") {
     return {
@@ -194,6 +203,7 @@ export async function setPollHidden(supabase: Supabase, pollId: string, hide: bo
       .from("polls")
       .update({ hidden_at: new Date().toISOString(), force_shown: false })
       .eq("id", pollId)
+      .eq("stream_id", streamId)
       .eq("status", "closed")
       .is("hidden_at", null);
     if (error) return { ok: false, status: 500, error: error.message };
@@ -204,6 +214,7 @@ export async function setPollHidden(supabase: Supabase, pollId: string, hide: bo
     .from("polls")
     .update({ hidden_at: null, force_shown: true })
     .eq("id", pollId)
+    .eq("stream_id", streamId)
     .eq("status", "closed");
   if (error) return { ok: false, status: 500, error: error.message };
   return { ok: true, message: "Shown on the site. The auto-hide timer is ignored for this poll." };

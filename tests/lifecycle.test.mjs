@@ -26,8 +26,8 @@ test("closing a poll: results email exactly once, and the close is atomic", asyn
   // Two things closing it at the same instant: one wins.
   const Q = addPollWithOptions(fake, { question: "TEST race", status: "open", opens_at: ET(2026, 10, 16, 12, 30).toISOString() });
   const outcomes = await Promise.all([
-    life.closePollAndFinish(fake, { id: Q.id, question: "TEST race", repeat_daily: false }),
-    life.closePollAndFinish(fake, { id: Q.id, question: "TEST race", repeat_daily: false }),
+    life.closePollAndFinish(fake, "main", { id: Q.id, question: "TEST race", repeat_daily: false }),
+    life.closePollAndFinish(fake, "main", { id: Q.id, question: "TEST race", repeat_daily: false }),
   ]);
   check("two simultaneous closes: exactly one closes it", outcomes.filter((o) => o.state === "closed").length === 1 && outcomes.filter((o) => o.state === "already_closed").length === 1);
   check("...and only one more email", emails().length === 2);
@@ -102,14 +102,14 @@ test("legacy behaviour kept: the close job closes a normal poll whenever it runs
 test("Open now: allowed before 8 PM, refused after, opens at the current moment", async () => {
   const fake = await fresh();
   const X = addPollWithOptions(fake, { question: "TEST X" });
-  const late = await life.openPollNow(fake, { pollId: X.id, confirmReplace: false, now: ET(2026, 10, 15, 21) });
+  const late = await life.openPollNow(fake, "main", { pollId: X.id, confirmReplace: false, now: ET(2026, 10, 15, 21) });
   check("after 8 PM: refused, poll untouched", !late.ok && late.code === "past_cutoff" && byId(X.id).status === "scheduled");
-  const ok = await life.openPollNow(fake, { pollId: X.id, confirmReplace: false, now: ET(2026, 10, 15, 11) });
+  const ok = await life.openPollNow(fake, "main", { pollId: X.id, confirmReplace: false, now: ET(2026, 10, 15, 11) });
   check("before 8 PM: opens, opens_at = now, cutoff = today 8 PM", ok.ok && byId(X.id).status === "open" && byId(X.id).opens_at === ET(2026, 10, 15, 11).toISOString());
   check("no email for a plain open", emails().length === 0);
-  const again = await life.openPollNow(fake, { pollId: X.id, confirmReplace: false, now: ET(2026, 10, 15, 11) });
+  const again = await life.openPollNow(fake, "main", { pollId: X.id, confirmReplace: false, now: ET(2026, 10, 15, 11) });
   check("an already-open poll can't be opened again", !again.ok && again.code === "not_scheduled");
-  const info = await life.getOpenNowInfo(fake, { now: ET(2026, 10, 15, 15, 11) });
+  const info = await life.getOpenNowInfo(fake, "main", { now: ET(2026, 10, 15, 15, 11) });
   check("the panel's duration line", info.message === "Voting will be open for 4 hours 49 minutes today (until 8:00 PM ET).", info.message);
 });
 
@@ -120,17 +120,17 @@ test("Open now replacing an open poll: confirmation needed, one email, repeat ca
   fake.addVote(O.id, optionsOf(O.id)[0].id, "s2");
   const X = addPollWithOptions(fake, { question: "TEST X" });
   const now = ET(2026, 10, 15, 15);
-  const info = await life.getOpenNowInfo(fake, { pollId: X.id, now });
+  const info = await life.getOpenNowInfo(fake, "main", { pollId: X.id, now });
   check("the panel names the open poll, its votes and what happens to its repeat", info.openPoll?.votes === 2 && info.openPoll.repeatOutcome === "queue_copy");
-  const noConfirm = await life.openPollNow(fake, { pollId: X.id, confirmReplace: false, now });
+  const noConfirm = await life.openPollNow(fake, "main", { pollId: X.id, confirmReplace: false, now });
   check("without confirmation: refused, nothing changed", !noConfirm.ok && noConfirm.code === "confirm_replace" && byId(O.id).status === "open" && emails().length === 0);
-  const res = await life.openPollNow(fake, { pollId: X.id, confirmReplace: true, now });
+  const res = await life.openPollNow(fake, "main", { pollId: X.id, confirmReplace: true, now });
   check("with confirmation: replaced", res.ok && byId(X.id).status === "open" && byId(O.id).status === "closed" && openPolls().length === 1);
   check("the old poll's votes are kept", db().db.votes.filter((v) => v.poll_id === O.id).length === 2);
   check("its results email went out once, with its tallies", emails().length === 1 && emails()[0].options.find((o) => o.label === "Cricket").vote_count === 2);
   const copy = scheduledPolls().find((p) => p.question === "TEST O");
   check("tomorrow's copy of the repeating poll is queued", !!copy && copy.repeat_daily === true);
-  const cronAgain = await life.closePollAndFinish(fake, { id: O.id, question: "TEST O", repeat_daily: true });
+  const cronAgain = await life.closePollAndFinish(fake, "main", { id: O.id, question: "TEST O", repeat_daily: true });
   check("the 8 PM job later finds it already closed: no second email or copy", cronAgain.state === "already_closed" && emails().length === 1 && scheduledPolls().length === 1);
 });
 
@@ -139,15 +139,15 @@ test("Open now when a different poll is queued: repeat pauses behind it; stale o
   const O = addPollWithOptions(fake, { question: "TEST R2", status: "open", repeat_daily: true, opens_at: ET(2026, 10, 15, 12, 5).toISOString() });
   const X = addPollWithOptions(fake, { question: "TEST X2" });
   const Q = addPollWithOptions(fake, { question: "TEST queued Q2", created_at: new Date(Date.now() + 1000).toISOString() });
-  const info = await life.getOpenNowInfo(fake, { pollId: X.id, now: ET(2026, 10, 15, 15) });
+  const info = await life.getOpenNowInfo(fake, "main", { pollId: X.id, now: ET(2026, 10, 15, 15) });
   check("info predicts the pause", info.openPoll?.repeatOutcome === "pause" && info.queued?.id === Q.id);
-  const r = await life.openPollNow(fake, { pollId: X.id, confirmReplace: true, now: ET(2026, 10, 15, 15) });
+  const r = await life.openPollNow(fake, "main", { pollId: X.id, confirmReplace: true, now: ET(2026, 10, 15, 15) });
   check("repeat paused, no extra copy", r.ok && byId(O.id).repeat_paused === true && scheduledPolls().length === 1);
 
   await fresh();
   const stale = addPollWithOptions(db(), { question: "TEST stale", status: "open", opens_at: ET(2026, 10, 14, 12, 5).toISOString() });
   const Y = addPollWithOptions(db(), { question: "TEST Y" });
-  const r2 = await life.openPollNow(db(), { pollId: Y.id, confirmReplace: false, now: ET(2026, 10, 15, 11) });
+  const r2 = await life.openPollNow(db(), "main", { pollId: Y.id, confirmReplace: false, now: ET(2026, 10, 15, 11) });
   check("a stale open poll needs no confirmation; it is closed and emailed once", r2.ok && byId(stale.id).status === "closed" && emails().length === 1 && openPolls().length === 1);
 });
 
@@ -156,8 +156,8 @@ test("Open now is safe against double clicks and simultaneous opens", async () =
   const X = addPollWithOptions(fake, { question: "TEST dbl" });
   const now = ET(2026, 10, 15, 11);
   const [a, b] = await Promise.all([
-    life.openPollNow(fake, { pollId: X.id, confirmReplace: false, now }),
-    life.openPollNow(fake, { pollId: X.id, confirmReplace: false, now }),
+    life.openPollNow(fake, "main", { pollId: X.id, confirmReplace: false, now }),
+    life.openPollNow(fake, "main", { pollId: X.id, confirmReplace: false, now }),
   ]);
   check("two clicks on one poll: exactly one opens it", [a, b].filter((r) => r.ok).length === 1 && openPolls().length === 1);
 
@@ -167,8 +167,8 @@ test("Open now is safe against double clicks and simultaneous opens", async () =
     const A = addPollWithOptions(f, { question: "TEST A" });
     const B = addPollWithOptions(f, { question: "TEST B" });
     await Promise.all([
-      life.openPollNow(f, { pollId: A.id, confirmReplace: true, now }),
-      life.openPollNow(f, { pollId: B.id, confirmReplace: true, now }),
+      life.openPollNow(f, "main", { pollId: A.id, confirmReplace: true, now }),
+      life.openPollNow(f, "main", { pollId: B.id, confirmReplace: true, now }),
     ]);
     worst = Math.max(worst, openPolls().length);
     check("no emails from a collision", emails().length === 0);
@@ -178,8 +178,8 @@ test("Open now is safe against double clicks and simultaneous opens", async () =
   const f2 = await fresh();
   const A = addPollWithOptions(f2, { question: "TEST A2" });
   const B = addPollWithOptions(f2, { question: "TEST B2" });
-  await life.openPollNow(f2, { pollId: A.id, confirmReplace: true, now });
-  const second = await life.openPollNow(f2, { pollId: B.id, confirmReplace: true, now: new Date(now.getTime() + 3000) });
+  await life.openPollNow(f2, "main", { pollId: A.id, confirmReplace: true, now });
+  const second = await life.openPollNow(f2, "main", { pollId: B.id, confirmReplace: true, now: new Date(now.getTime() + 3000) });
   check("a second open within seconds is refused", !second.ok && second.code === "just_opened" && openPolls().length === 1);
 });
 

@@ -3,6 +3,7 @@ import type { createServiceRoleClient } from "@/lib/supabase/server";
 import { EVENT_BUCKET } from "@/config/constants";
 import { checkImageUpload } from "@/lib/imageUpload";
 import { publicImageUrl } from "@/lib/species";
+import type { StreamId } from "@/lib/data/streams";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 
@@ -53,7 +54,8 @@ export async function loadPollImagePaths(
 
 // A file can be used by more than one poll (a repeating poll's next copy reuses
 // its parent's picture), so a file is only deleted from storage once no poll
-// points at it any more. If we can't tell, we keep it.
+// points at it any more. If we can't tell, we keep it. This looks at every
+// stream's polls on purpose: a file still used anywhere is never deleted.
 export async function removeFileIfUnreferenced(supabase: Supabase, path: string): Promise<boolean> {
   const { data, error } = await supabase.from("polls").select("id").eq("image_path", path).limit(1);
   if (error || (data?.length ?? 0) > 0) return false;
@@ -66,12 +68,14 @@ export async function removeFileIfUnreferenced(supabase: Supabase, path: string)
 // even once votes exist, and not on a closed one.
 async function loadEditablePoll(
   supabase: Supabase,
+  streamId: StreamId,
   pollId: string,
 ): Promise<{ poll: { id: string; image_path: string | null } } | ImageFailure> {
   const { data: poll, error } = await supabase
     .from("polls")
     .select("id, status, image_path")
     .eq("id", pollId)
+    .eq("stream_id", streamId)
     .maybeSingle();
   if (isMissingColumn(error)) {
     return { ok: false, status: 400, code: "images_unsupported", error: IMAGES_SQL_HINT };
@@ -84,11 +88,11 @@ async function loadEditablePoll(
 }
 
 // Replace (or set) the picture on an existing poll.
-export async function setPollImage(supabase: Supabase, pollId: string, file: File): Promise<ImageResult> {
+export async function setPollImage(supabase: Supabase, streamId: StreamId, pollId: string, file: File): Promise<ImageResult> {
   const check = await checkImageUpload(file);
   if (!check.ok) return { ok: false, status: 400, error: check.error };
 
-  const loaded = await loadEditablePoll(supabase, pollId);
+  const loaded = await loadEditablePoll(supabase, streamId, pollId);
   if (!("poll" in loaded)) return loaded;
   const { poll } = loaded;
 
@@ -99,7 +103,11 @@ export async function setPollImage(supabase: Supabase, pollId: string, file: Fil
     .upload(path, file, { contentType: check.contentType, upsert: false });
   if (uploadError) return { ok: false, status: 500, error: uploadError.message };
 
-  const { error: dbError } = await supabase.from("polls").update({ image_path: path }).eq("id", poll.id);
+  const { error: dbError } = await supabase
+    .from("polls")
+    .update({ image_path: path })
+    .eq("id", poll.id)
+    .eq("stream_id", streamId);
   if (dbError) {
     await supabase.storage.from(EVENT_BUCKET).remove([path]);
     return { ok: false, status: 500, error: dbError.message };
@@ -109,13 +117,17 @@ export async function setPollImage(supabase: Supabase, pollId: string, file: Fil
   return { ok: true, path, url: pollImageUrl(path) };
 }
 
-export async function clearPollImage(supabase: Supabase, pollId: string): Promise<{ ok: true } | ImageFailure> {
-  const loaded = await loadEditablePoll(supabase, pollId);
+export async function clearPollImage(supabase: Supabase, streamId: StreamId, pollId: string): Promise<{ ok: true } | ImageFailure> {
+  const loaded = await loadEditablePoll(supabase, streamId, pollId);
   if (!("poll" in loaded)) return loaded;
   const { poll } = loaded;
   if (!poll.image_path) return { ok: true };
 
-  const { error } = await supabase.from("polls").update({ image_path: null }).eq("id", poll.id);
+  const { error } = await supabase
+    .from("polls")
+    .update({ image_path: null })
+    .eq("id", poll.id)
+    .eq("stream_id", streamId);
   if (error) return { ok: false, status: 500, error: error.message };
   await removeFileIfUnreferenced(supabase, poll.image_path);
   return { ok: true };
@@ -142,6 +154,7 @@ export async function deletePendingImage(supabase: Supabase, path: string): Prom
 // On any failure the pending file is left where it was.
 export async function attachPendingImage(
   supabase: Supabase,
+  streamId: StreamId,
   pollId: string,
   pendingPath: string,
 ): Promise<{ ok: true; path: string } | ImageFailure> {
@@ -153,7 +166,11 @@ export async function attachPendingImage(
   const { error: moveError } = await supabase.storage.from(EVENT_BUCKET).move(pendingPath, path);
   if (moveError) return { ok: false, status: 400, error: `Couldn't use that picture: ${moveError.message}` };
 
-  const { error: dbError } = await supabase.from("polls").update({ image_path: path }).eq("id", pollId);
+  const { error: dbError } = await supabase
+    .from("polls")
+    .update({ image_path: path })
+    .eq("id", pollId)
+    .eq("stream_id", streamId);
   if (dbError) {
     await supabase.storage.from(EVENT_BUCKET).remove([path]);
     return isMissingColumn(dbError)

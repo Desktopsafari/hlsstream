@@ -6,10 +6,13 @@ import { imagesSupported, loadPollImagePaths, pollImageUrl } from "@/lib/data/po
 import { DURATION_COLS, durationColumnsExist, loadPollDuration } from "@/lib/data/polls/timing";
 import { getPollVisibility, hideColumnsExist, loadAutoHideHours } from "@/lib/data/polls/visibility";
 import { countVotes, loadResultsForPolls } from "@/lib/data/polls/votes";
+import type { StreamId } from "@/lib/data/streams";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 
-// The admin history, editing, Close now and Change end time.
+// The admin history, editing, Close now and Change end time. Every function
+// takes the stream the admin is working on and only ever reads or changes that
+// stream's polls: a poll id from another stream is "Poll not found."
 
 export type AdminResult<T = object> =
   | ({ ok: true } & T)
@@ -17,7 +20,7 @@ export type AdminResult<T = object> =
 
 // The latest 20 polls with their results, picture, timing and visibility, plus
 // which optional features the database supports.
-export async function listAdminPolls(supabase: Supabase): Promise<AdminResult<{ body: Record<string, unknown> }>> {
+export async function listAdminPolls(supabase: Supabase, streamId: StreamId): Promise<AdminResult<{ body: Record<string, unknown> }>> {
   // ends_at / open_ended / duration_days exist once supabase/poll_duration.sql has been run.
   const durationsAvailable = await durationColumnsExist(supabase);
   // hidden_at / force_shown exist once supabase/poll_hide.sql has been run.
@@ -29,6 +32,7 @@ export async function listAdminPolls(supabase: Supabase): Promise<AdminResult<{ 
         durationsAvailable ? DURATION_COLS : ""
       }${hideAvailable ? ", hidden_at, force_shown" : ""}`,
     )
+    .eq("stream_id", streamId)
     .order("created_at", { ascending: false })
     .limit(20);
 
@@ -83,11 +87,12 @@ export async function listAdminPolls(supabase: Supabase): Promise<AdminResult<{ 
   };
 }
 
-// Only one poll waits in the queue at a time.
-export async function hasScheduledPoll(supabase: Supabase): Promise<boolean> {
+// Only one poll waits in the queue at a time, per stream.
+export async function hasScheduledPoll(supabase: Supabase, streamId: StreamId): Promise<boolean> {
   const { data: existingScheduled } = await supabase
     .from("polls")
     .select("id")
+    .eq("stream_id", streamId)
     .eq("status", "scheduled")
     .limit(1)
     .maybeSingle();
@@ -107,6 +112,7 @@ type OptionInput = { id?: string; label: string };
 // through /api/admin/polls/image rather than here.
 export async function editPoll(
   supabase: Supabase,
+  streamId: StreamId,
   input: { pollId: string; question: string; options: unknown; repeatDaily: unknown; duration: unknown },
 ): Promise<AdminResult> {
   const { pollId, question } = input;
@@ -117,6 +123,7 @@ export async function editPoll(
     .from("polls")
     .select("id, question, status, repeat_daily")
     .eq("id", pollId)
+    .eq("stream_id", streamId)
     .maybeSingle();
 
   if (!poll) return { ok: false, status: 404, error: "Poll not found." };
@@ -227,7 +234,7 @@ export async function editPoll(
   if (newDuration && durationsAvailable) Object.assign(pollUpdates, newDuration);
 
   if (Object.keys(pollUpdates).length > 0) {
-    const { error } = await supabase.from("polls").update(pollUpdates).eq("id", pollId);
+    const { error } = await supabase.from("polls").update(pollUpdates).eq("id", pollId).eq("stream_id", streamId);
     if (error) return { ok: false, status: 500, error: error.message };
   }
   return { ok: true };
@@ -238,11 +245,12 @@ export async function editPoll(
 // as if the poll had ended on its own. Safe against double clicks: the status
 // flip only succeeds for the first request; any other gets "already closed"
 // and sends nothing.
-export async function closePollNow(supabase: Supabase, pollId: string): Promise<AdminResult<{ message: string }>> {
+export async function closePollNow(supabase: Supabase, streamId: StreamId, pollId: string): Promise<AdminResult<{ message: string }>> {
   const { data: poll } = await supabase
     .from("polls")
     .select("id, question, status, repeat_daily")
     .eq("id", pollId)
+    .eq("stream_id", streamId)
     .maybeSingle();
   if (!poll) return { ok: false, status: 404, error: "Poll not found." };
   if (poll.status !== "open") {
@@ -254,7 +262,7 @@ export async function closePollNow(supabase: Supabase, pollId: string): Promise<
     };
   }
 
-  const outcome = await closePollAndFinish(supabase, poll);
+  const outcome = await closePollAndFinish(supabase, streamId, poll);
   if (outcome.state === "error") return { ok: false, status: 500, error: "Couldn't close the poll." };
   if (outcome.state === "already_closed") {
     return { ok: false, status: 409, code: "not_open", error: "That poll was just closed." };
@@ -266,13 +274,14 @@ export async function closePollNow(supabase: Supabase, pollId: string): Promise<
 // Change when voting ends on an open poll (the route has already checked the
 // time is in the future). Conditional on the poll still being open and
 // idempotent, so a double click does no harm.
-export async function setPollEndTime(supabase: Supabase, pollId: string, end: Date): Promise<AdminResult> {
+export async function setPollEndTime(supabase: Supabase, streamId: StreamId, pollId: string, end: Date): Promise<AdminResult> {
   if (!(await durationColumnsExist(supabase))) return { ok: false, status: 400, error: DURATION_SQL_HINT };
 
   const { data: poll } = await supabase
     .from("polls")
     .select("id, status, repeat_daily")
     .eq("id", pollId)
+    .eq("stream_id", streamId)
     .maybeSingle();
   if (!poll) return { ok: false, status: 404, error: "Poll not found." };
   if (poll.status !== "open") {
@@ -290,6 +299,7 @@ export async function setPollEndTime(supabase: Supabase, pollId: string, end: Da
     .from("polls")
     .update({ ends_at: end.toISOString(), open_ended: false })
     .eq("id", pollId)
+    .eq("stream_id", streamId)
     .eq("status", "open")
     .select("id");
   if (error) return { ok: false, status: 500, error: error.message };
@@ -298,4 +308,11 @@ export async function setPollEndTime(supabase: Supabase, pollId: string, end: Da
   }
   console.log(`Poll ${pollId} end time set to ${end.toISOString()} by the admin`);
   return { ok: true };
+}
+
+// Whether a poll id belongs to the stream (for checks before a read that is
+// keyed by poll id alone).
+export async function pollInStream(supabase: Supabase, streamId: StreamId, pollId: string): Promise<boolean> {
+  const { data } = await supabase.from("polls").select("id").eq("id", pollId).eq("stream_id", streamId).maybeSingle();
+  return !!data;
 }

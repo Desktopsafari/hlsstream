@@ -12,7 +12,7 @@ const setVisibility = (date, pollId, action) =>
   withNow(date, async () => json(await visibilityRoute.POST(req("POST", "/api/admin/polls/visibility", { pollId, action }))));
 const setAutoHide = async (hours) =>
   json(await autoHideRoute.PUT(req("PUT", "/api/admin/polls/auto-hide", { hours })));
-const adminList = (date) => withNow(date, async () => json(await adminPolls.GET()));
+const adminList = (date) => withNow(date, async () => json(await adminPolls.GET(req("GET", "/api/admin/polls"))));
 const shown = async (date) => (await publicPoll(date)).body.poll;
 
 // A daily poll that opened at noon on Oct 15 and was closed by the 8 PM job.

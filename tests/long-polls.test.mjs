@@ -197,29 +197,29 @@ test("validation: repeat vs long durations, editing a queued poll, options still
 test("Open now for long polls: allowed after 8 PM; ended end times refused; normal polls still refused", async () => {
   const fake = await fresh();
   const X = addPollWithOptions(fake, { question: "TEST x3", duration_days: 3 });
-  const r = await life.openPollNow(fake, { pollId: X.id, confirmReplace: false, now: ET(2026, 10, 15, 21, 30) });
+  const r = await life.openPollNow(fake, "main", { pollId: X.id, confirmReplace: false, now: ET(2026, 10, 15, 21, 30) });
   check("a 3-day poll opens at 9:30 PM, counted from today", r.ok && byId(X.id).ends_at === "2026-10-18T00:00:00.000Z");
   await fresh();
   const Y = addPollWithOptions(db(), { question: "TEST daily after 8" });
-  const r2 = await life.openPollNow(db(), { pollId: Y.id, confirmReplace: false, now: ET(2026, 10, 15, 21, 30) });
+  const r2 = await life.openPollNow(db(), "main", { pollId: Y.id, confirmReplace: false, now: ET(2026, 10, 15, 21, 30) });
   check("a normal poll is still refused after 8 PM", !r2.ok && r2.code === "past_cutoff");
   await fresh();
   const Z = addPollWithOptions(db(), { question: "TEST past end", ends_at: ET(2026, 10, 15, 9).toISOString() });
-  const r3 = await life.openPollNow(db(), { pollId: Z.id, confirmReplace: false, now: ET(2026, 10, 15, 11) });
+  const r3 = await life.openPollNow(db(), "main", { pollId: Z.id, confirmReplace: false, now: ET(2026, 10, 15, 11) });
   check("an end that has passed: refused", !r3.ok && r3.code === "end_passed" && byId(Z.id).status === "scheduled");
   await fresh();
   const D = addPollWithOptions(db(), { question: "TEST dbl long", open_ended: true });
   const [a, b] = await Promise.all([
-    life.openPollNow(db(), { pollId: D.id, confirmReplace: false, now: ET(2026, 10, 15, 11) }),
-    life.openPollNow(db(), { pollId: D.id, confirmReplace: false, now: ET(2026, 10, 15, 11) }),
+    life.openPollNow(db(), "main", { pollId: D.id, confirmReplace: false, now: ET(2026, 10, 15, 11) }),
+    life.openPollNow(db(), "main", { pollId: D.id, confirmReplace: false, now: ET(2026, 10, 15, 11) }),
   ]);
   check("double click on a long poll: opens once", [a, b].filter((x) => x.ok).length === 1 && openPolls().length === 1);
   await fresh();
   const Lg = addPollWithOptions(db(), { question: "TEST running long", status: "open", opens_at: ET(2026, 10, 15, 12).toISOString(), ends_at: ET(2026, 10, 18, 20).toISOString() });
   const N = addPollWithOptions(db(), { question: "TEST new daily" });
-  const info = await life.getOpenNowInfo(db(), { pollId: N.id, now: ET(2026, 10, 15, 14) });
+  const info = await life.getOpenNowInfo(db(), "main", { pollId: N.id, now: ET(2026, 10, 15, 14) });
   check("panel mentions the running poll's end", /voting ends Sunday 8:00 PM ET/.test(info.openPoll?.ends ?? ""));
-  const noc = await life.openPollNow(db(), { pollId: N.id, confirmReplace: false, now: ET(2026, 10, 15, 14) });
+  const noc = await life.openPollNow(db(), "main", { pollId: N.id, confirmReplace: false, now: ET(2026, 10, 15, 14) });
   check("replacing it needs confirmation", !noc.ok && noc.code === "confirm_replace" && byId(Lg.id).status === "open");
 });
 
@@ -228,7 +228,7 @@ test("without the duration columns the site behaves exactly as before", async ()
   const W = addPollWithOptions(fake, { question: "TEST nocols", status: "open", opens_at: ET(2026, 10, 15, 12, 30).toISOString() });
   const [wo] = optionsOf(W.id);
   check("voting works and ends at 8 PM", (await vote(ET(2026, 10, 15, 19, 0), W.id, wo.id, "w1")).status === 200 && (await vote(ET(2026, 10, 15, 20, 1), W.id, wo.id, "w2")).status === 400);
-  const adm = await (await routes.polls()).GET();
+  const adm = await (await routes.polls()).GET(req("GET", "/api/admin/polls"));
   check("admin list works, durationsSupported=false", adm.status === 200 && (await adm.json()).durationsSupported === false);
   const mk = await queue(ET(2026, 10, 15, 11), { question: "TEST nocols long", options: ["a", "b"], duration: { mode: "days", days: 3 } });
   check("a multi-day poll is refused with the SQL hint", mk.status === 400 && /poll_duration\.sql/.test(mk.body.error));

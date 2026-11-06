@@ -4,8 +4,8 @@ import { check, fresh, json, load, req } from "./support/helpers.mjs";
 const publicRoute = await load("app/api/species/route.ts");
 const adminRoute = await load("app/api/admin/species/route.ts");
 
-const publicCard = async () => (await json(await publicRoute.GET())).body.card;
-const adminGet = async () => json(await adminRoute.GET());
+const publicCard = async () => (await json(await publicRoute.GET(req("GET", "/api/species")))).body.card;
+const adminGet = async () => json(await adminRoute.GET(req("GET", "/api/admin/species")));
 const save = async (body) =>
   json(await adminRoute.PUT(req("PUT", "/api/admin/species", { speciesName: "TEST frog", infoBlocks: [], ...body })));
 

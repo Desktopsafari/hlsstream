@@ -1,5 +1,6 @@
 import type { createServiceRoleClient } from "@/lib/supabase/server";
-import { SPECIES_BUCKET, STREAM_ID } from "@/config/constants";
+import { SPECIES_BUCKET } from "@/config/constants";
+import type { StreamId } from "@/lib/data/streams";
 import { publicImageUrl } from "@/lib/publicImageUrl";
 import {
   IMAGE_KINDS,
@@ -13,6 +14,10 @@ import {
 } from "@/lib/data/species/rules";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
+
+// Every function takes the stream (one card per stream: species_cards.stream_id
+// is unique) and only reads or writes that stream's card; no other stream's
+// card can be reached.
 
 export type SpeciesResult<T = object> =
   | ({ ok: true } & T)
@@ -30,7 +35,7 @@ function isMissingNamesColumns(error: { code?: string; message?: string } | null
 // supabase/species_names.sql is run (namesSupported is then false).
 export async function loadSpeciesCardRow(
   supabase: Supabase,
-  streamId: string = STREAM_ID,
+  streamId: StreamId,
 ): Promise<{ row: SpeciesCardRow | null; namesSupported: boolean; error: string | null }> {
   const withNames = await supabase
     .from("species_cards")
@@ -53,7 +58,7 @@ export async function loadSpeciesCardRow(
 
 // What /api/species sends: the card, or null when there is none or it can't
 // be read (the page simply shows no card).
-export async function getPublicSpeciesCard(supabase: Supabase, streamId: string = STREAM_ID) {
+export async function getPublicSpeciesCard(supabase: Supabase, streamId: StreamId) {
   // Works with or without the names columns (supabase/species_names.sql).
   const { row, error } = await loadSpeciesCardRow(supabase, streamId);
   if (error) {
@@ -66,7 +71,7 @@ export async function getPublicSpeciesCard(supabase: Supabase, streamId: string 
 // The admin form's card plus whether the names columns exist.
 export async function getAdminSpeciesCard(
   supabase: Supabase,
-  streamId: string = STREAM_ID,
+  streamId: StreamId,
 ): Promise<SpeciesResult<{ body: Record<string, unknown> }>> {
   const { row, namesSupported, error } = await loadSpeciesCardRow(supabase, streamId);
   if (error) return { ok: false, status: 500, error };
@@ -78,8 +83,8 @@ export async function getAdminSpeciesCard(
 // Images are saved separately (setSpeciesImage).
 export async function saveSpeciesCard(
   supabase: Supabase,
+  streamId: StreamId,
   body: unknown,
-  streamId: string = STREAM_ID,
 ): Promise<SpeciesResult> {
   const parsed = parseSpeciesCardInput(body);
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
@@ -105,7 +110,7 @@ export async function saveSpeciesCard(
   return { ok: true };
 }
 
-async function loadImagePath(supabase: Supabase, streamId: string, column: string): Promise<string | null> {
+async function loadImagePath(supabase: Supabase, streamId: StreamId, column: string): Promise<string | null> {
   const { data: existing } = await supabase
     .from("species_cards")
     .select(column)
@@ -118,9 +123,9 @@ async function loadImagePath(supabase: Supabase, streamId: string, column: strin
 // deletes the file it replaces.
 export async function setSpeciesImage(
   supabase: Supabase,
+  streamId: StreamId,
   kind: ImageKind,
   file: File,
-  streamId: string = STREAM_ID,
 ): Promise<SpeciesResult<{ url: string | null }>> {
   const ext = IMAGE_TYPES[file.type];
   if (!ext) return { ok: false, status: 400, error: "Images must be JPG, PNG, or WebP." };
@@ -132,6 +137,8 @@ export async function setSpeciesImage(
   const oldPath = await loadImagePath(supabase, streamId, column);
 
   // Unique name per upload so the CDN/image optimizer never serves a stale copy.
+  // The folder is the stream id, as it always was ('main/...' for the frog
+  // stream), so existing files keep their paths.
   const path = `${streamId}/${kind}-${Date.now()}.${ext}`;
   const { error: uploadError } = await supabase.storage
     .from(SPECIES_BUCKET)
@@ -155,8 +162,8 @@ export async function setSpeciesImage(
 // picture = fine.
 export async function clearSpeciesImage(
   supabase: Supabase,
+  streamId: StreamId,
   kind: ImageKind,
-  streamId: string = STREAM_ID,
 ): Promise<SpeciesResult> {
   const column = IMAGE_KINDS[kind];
   const oldPath = await loadImagePath(supabase, streamId, column);

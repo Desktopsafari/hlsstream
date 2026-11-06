@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { clearSpeciesImage, parseImageKind, setSpeciesImage } from "@/lib/data/species";
+import { resolveStream, streamRefFrom } from "@/lib/data/streams";
+
+// The species card's photo or range map, on the stream named by `stream_id`
+// (form) or `?stream=` (the frog stream when neither is given). An unknown
+// stream is refused (404); no other stream's card is touched.
 
 export async function POST(request: Request) {
   const formData = await request.formData().catch(() => null);
@@ -11,7 +16,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Need a kind and a file." }, { status: 400 });
   }
 
-  const result = await setSpeciesImage(createServiceRoleClient(), kind, file);
+  const supabase = createServiceRoleClient();
+  const found = await resolveStream(supabase, streamRefFrom(request, formData ?? undefined));
+  if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status });
+  const result = await setSpeciesImage(supabase, found.stream.id, kind, file);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json({ ok: true, url: result.url });
 }
@@ -22,7 +30,10 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Invalid kind." }, { status: 400 });
   }
 
-  const result = await clearSpeciesImage(createServiceRoleClient(), kind);
+  const supabase = createServiceRoleClient();
+  const found = await resolveStream(supabase, streamRefFrom(request));
+  if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status });
+  const result = await clearSpeciesImage(supabase, found.stream.id, kind);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json({ ok: true });
 }

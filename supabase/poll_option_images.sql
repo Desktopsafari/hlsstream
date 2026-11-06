@@ -1,3 +1,6 @@
+-- DO NOT RUN. The column this file adds (poll_options.image_path) was dropped on purpose; running
+-- this would re-add it. Kept only as a record. See supabase/README.md.
+--
 -- SUPERSEDED: pictures now go on the poll question (supabase/poll_question_image.sql).
 -- The site no longer reads or writes this column. It was already run on the live
 -- database and is left in place, unused; there is no need to run this file again.

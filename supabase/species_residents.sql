@@ -1,3 +1,6 @@
+-- DO NOT RUN. The column this file adds (species_cards.residents) was dropped on purpose; running
+-- this would re-add it. Kept only as a record. See supabase/README.md.
+--
 -- SUPERSEDED by supabase/species_names.sql: the code no longer reads the
 -- residents column. Kept for the record because it was already run.
 

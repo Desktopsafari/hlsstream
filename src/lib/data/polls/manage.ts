@@ -6,7 +6,7 @@ import { imagesSupported, loadPollImagePaths, pollImageUrl } from "@/lib/data/po
 import { DURATION_COLS, durationColumnsExist, loadPollDuration } from "@/lib/data/polls/timing";
 import { getPollVisibility, hideColumnsExist, loadAutoHideHours } from "@/lib/data/polls/visibility";
 import { countVotes, loadResultsForPolls } from "@/lib/data/polls/votes";
-import type { StreamId } from "@/lib/data/streams";
+import type { PollStream, StreamId } from "@/lib/data/streams";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 
@@ -244,8 +244,14 @@ export async function editPoll(
 // immediately (once), and a repeating or paused daily poll is handled exactly
 // as if the poll had ended on its own. Safe against double clicks: the status
 // flip only succeeds for the first request; any other gets "already closed"
-// and sends nothing.
-export async function closePollNow(supabase: Supabase, streamId: StreamId, pollId: string): Promise<AdminResult<{ message: string }>> {
+// and sends nothing. On a stream with polls off the poll still closes and is
+// emailed, but no repeat copy is queued.
+export async function closePollNow(
+  supabase: Supabase,
+  stream: PollStream,
+  pollId: string,
+): Promise<AdminResult<{ message: string }>> {
+  const streamId = stream.id;
   const { data: poll } = await supabase
     .from("polls")
     .select("id, question, status, repeat_daily")
@@ -262,7 +268,9 @@ export async function closePollNow(supabase: Supabase, streamId: StreamId, pollI
     };
   }
 
-  const outcome = await closePollAndFinish(supabase, streamId, poll);
+  const outcome = await closePollAndFinish(supabase, streamId, poll, {}, {
+    repeatMode: stream.polls_enabled ? "normal" : "skip",
+  });
   if (outcome.state === "error") return { ok: false, status: 500, error: "Couldn't close the poll." };
   if (outcome.state === "already_closed") {
     return { ok: false, status: 409, code: "not_open", error: "That poll was just closed." };

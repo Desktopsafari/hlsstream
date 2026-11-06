@@ -71,13 +71,13 @@ export function streamRefFrom(request: Request, body?: unknown): string | null {
   return params.get("stream_id") || params.get("stream") || null;
 }
 
-// Every stream with polls turned on, in display order -- what the daily poll
-// jobs work through. Null if the streams table can't be read.
-export async function listPollStreams(supabase: Supabase): Promise<PollStream[] | null> {
+// Every stream, polls on or off, in display order -- what the daily poll jobs
+// work through (ended polls are closed everywhere; only streams with polls on
+// open or queue anything). Null if the streams table can't be read.
+export async function listStreams(supabase: Supabase): Promise<PollStream[] | null> {
   const { data, error } = await supabase
     .from("streams")
     .select(COLS)
-    .eq("polls_enabled", true)
     .order("sort_order", { ascending: true });
   if (error) {
     console.error("Stream list failed:", error.message);

@@ -16,6 +16,8 @@ export type LifecycleDeps = {
 // Closing a poll (the 8pm / noon crons, Close now, and Open now replacing one)
 // ---------------------------------------------------------------------------
 
+export type RepeatMode = "normal" | "pause" | "skip";
+
 export type CloseOutcome =
   | { state: "closed"; repeatMessage: string }
   | { state: "already_closed" }
@@ -34,12 +36,16 @@ export type CloseOutcome =
 //
 // Only acts on a poll of the given stream (the flip is filtered by stream_id),
 // and the repeat copy is queued on that same stream.
+//
+// repeatMode "skip" is used on a stream with polls turned off: the poll still
+// closes and its results are still emailed, but no repeat copy is queued (and
+// no paused daily poll is resumed), since nothing may be queued there.
 export async function closePollAndFinish(
   supabase: Supabase,
   streamId: StreamId,
   poll: { id: string; question: string; repeat_daily: boolean },
   deps: LifecycleDeps = {},
-  opts: { repeatMode?: "normal" | "pause" } = {},
+  opts: { repeatMode?: RepeatMode } = {},
 ): Promise<CloseOutcome> {
   const { data: flipped, error } = await supabase
     .from("polls")
@@ -63,6 +69,10 @@ export async function closePollAndFinish(
   await (deps.sendResultsEmail ?? sendPollResultsEmail)(poll.question, results ?? []);
 
   let repeatMessage = "";
+  if (opts.repeatMode === "skip") {
+    if (poll.repeat_daily) repeatMessage = " Polls are off for this stream, so no repeat was queued.";
+    return { state: "closed", repeatMessage };
+  }
   if (poll.repeat_daily) {
     if (opts.repeatMode === "pause") {
       await supabase.from("polls").update({ repeat_paused: true }).eq("id", poll.id).eq("stream_id", streamId);
@@ -103,11 +113,12 @@ export async function closeDuePolls(
   polls: ({ id: string; question: string; repeat_daily: boolean; status: string } & PollTiming)[],
   job: CronJob,
   deps: LifecycleDeps = {},
+  opts: { repeatMode?: RepeatMode } = {},
 ): Promise<string> {
   let message = "";
   for (const p of polls) {
     if (!isDueForJob(p, job)) continue;
-    const outcome = await closePollAndFinish(supabase, streamId, p, deps);
+    const outcome = await closePollAndFinish(supabase, streamId, p, deps, opts);
     if (outcome.state === "closed") {
       message += ` Closed the ended poll "${p.question}" and emailed its results.${outcome.repeatMessage}`;
     }

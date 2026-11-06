@@ -3,7 +3,7 @@ import { closeDuePolls, closePollAndFinish, isDueForJob } from "@/lib/data/polls
 import { endsAtForOpening, openQueuedPoll } from "@/lib/data/polls/open";
 import { getPollState, type PollTiming } from "@/lib/pollSchedule";
 import { durationSelect, timingSelect } from "@/lib/data/polls/timing";
-import { listPollStreams, type PollStream, type StreamId } from "@/lib/data/streams";
+import { listStreams, type PollStream } from "@/lib/data/streams";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 
@@ -14,24 +14,26 @@ type OpenRow = { id: string; question: string; status: string; repeat_daily: boo
 
 const ok = (body: Record<string, unknown>): JobResponse => ({ status: 200, body });
 
-// Runs a daily job once for every stream with polls turned on (one global
-// schedule, decision 5). Each stream is handled on its own: one stream's poll
+// Runs a daily job once for every stream (one global schedule, decision 5).
+// Streams with polls turned off are included so their ended polls still close
+// and their results are still emailed; the job itself makes sure nothing is
+// opened or queued on them. Each stream is handled on its own: one stream's poll
 // never decides what happens on another, and one stream failing doesn't stop
 // the rest. With a single stream the response is exactly that stream's
 // response, as it was before there were streams.
 async function forEachPollStream(
   supabase: Supabase,
-  job: (streamId: StreamId) => Promise<JobResponse>,
+  job: (stream: PollStream) => Promise<JobResponse>,
 ): Promise<JobResponse> {
-  const streams = await listPollStreams(supabase);
+  const streams = await listStreams(supabase);
   if (!streams) return { status: 500, body: { error: "Couldn't load the streams." } };
-  if (streams.length === 0) return ok({ message: "No stream has polls turned on." });
+  if (streams.length === 0) return ok({ message: "No streams." });
 
   const results: { stream: PollStream; res: JobResponse }[] = [];
   for (const stream of streams) {
     let res: JobResponse;
     try {
-      res = await job(stream.id);
+      res = await job(stream);
     } catch (err) {
       console.error(`Poll job failed for stream ${stream.id}:`, err);
       res = { status: 500, body: { error: "The job failed for this stream." } };
@@ -49,11 +51,16 @@ async function forEachPollStream(
   };
 }
 
-// The noon job, for one stream: opens the stream's oldest queued poll, unless
+// The noon job, for one stream: closes the stream's ended long polls (on every
+// stream), then -- only if the stream has polls on -- opens its oldest queued
+// poll, unless
 // one of its polls is still taking votes (opened by hand with "Open now", or a
 // multi-day / open-ended poll still running) -- then the queued poll waits. A
 // poll past its end doesn't count; it just hasn't been flipped to closed yet.
-async function openPollForStream(supabase: Supabase, streamId: StreamId): Promise<JobResponse> {
+async function openPollForStream(supabase: Supabase, stream: PollStream): Promise<JobResponse> {
+  const streamId = stream.id;
+  // No repeat copies on a stream with polls off (see closePollAndFinish).
+  const repeatMode = stream.polls_enabled ? "normal" : "skip";
   const { data: openRows } = await supabase
     .from("polls")
     .select(`id, question, status, repeat_daily, opens_at${await timingSelect(supabase)}`)
@@ -67,7 +74,8 @@ async function openPollForStream(supabase: Supabase, streamId: StreamId): Promis
   // A multi-day poll whose end time has passed is closed here (results emailed
   // once) before the queue moves on, so its email never waits for the 8pm job.
   // Normal daily polls are left to the close job, exactly as before.
-  const closedMessage = await closeDuePolls(supabase, streamId, openPolls, "noon");
+  const closedMessage = await closeDuePolls(supabase, streamId, openPolls, "noon", {}, { repeatMode });
+  if (!stream.polls_enabled) return ok({ message: `Polls are off for this stream, so nothing was opened.${closedMessage}` });
 
   const { data: nextPoll } = await supabase
     .from("polls")
@@ -98,7 +106,9 @@ async function openPollForStream(supabase: Supabase, streamId: StreamId): Promis
   return ok({ message: `Poll opened.${closedMessage}`, pollId: next.id });
 }
 
-// The 8 PM job, for one stream. Closing, the results email, and carrying a
+// The 8 PM job, for one stream (every stream, polls on or off: an ended poll
+// is always closed and its results emailed; repeat copies only where polls are
+// on). Closing, the results email, and carrying a
 // repeating poll forward all live in closePollAndFinish, which Close now and
 // "Open now" also use -- so a poll closed there is already closed here and its
 // results aren't emailed twice.
@@ -106,7 +116,8 @@ async function openPollForStream(supabase: Supabase, streamId: StreamId): Promis
 // A normal daily poll is closed here exactly as before. A poll with a chosen
 // duration (multi-day, specific end time, open-ended) is left alone until its
 // end time has passed, and an open-ended one is never closed by this job.
-async function closePollForStream(supabase: Supabase, streamId: StreamId): Promise<JobResponse> {
+async function closePollForStream(supabase: Supabase, stream: PollStream): Promise<JobResponse> {
+  const streamId = stream.id;
   const { data: row } = await supabase
     .from("polls")
     .select(`id, question, status, repeat_daily, opens_at${await timingSelect(supabase)}`)
@@ -126,16 +137,18 @@ async function closePollForStream(supabase: Supabase, streamId: StreamId): Promi
     });
   }
 
-  const outcome = await closePollAndFinish(supabase, streamId, openPoll);
+  const outcome = await closePollAndFinish(supabase, streamId, openPoll, {}, {
+    repeatMode: stream.polls_enabled ? "normal" : "skip",
+  });
   if (outcome.state === "error") return { status: 500, body: { error: "Failed to close poll" } };
   if (outcome.state === "already_closed") return ok({ message: "Poll was already closed.", pollId: openPoll.id });
   return ok({ message: `Poll closed and results emailed.${outcome.repeatMessage}`, pollId: openPoll.id });
 }
 
 export function runOpenPollJob(supabase: Supabase): Promise<JobResponse> {
-  return forEachPollStream(supabase, (streamId) => openPollForStream(supabase, streamId));
+  return forEachPollStream(supabase, (stream) => openPollForStream(supabase, stream));
 }
 
 export function runClosePollJob(supabase: Supabase): Promise<JobResponse> {
-  return forEachPollStream(supabase, (streamId) => closePollForStream(supabase, streamId));
+  return forEachPollStream(supabase, (stream) => closePollForStream(supabase, stream));
 }

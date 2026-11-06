@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   const found = await resolveStream(supabase, streamRefFrom(request, body));
   if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status });
 
-  const result = await closePollNow(supabase, found.stream.id, pollId);
+  const result = await closePollNow(supabase, found.stream, pollId);
   if (!result.ok) {
     return NextResponse.json({ error: result.error, code: result.code }, { status: result.status });
   }

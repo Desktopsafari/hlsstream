@@ -13,7 +13,7 @@ export {
   parsePendingImage,
   POLLS_OFF_ERROR,
 } from "@/lib/data/polls/admin";
-export { closeDuePolls, closePollAndFinish, isDueForJob, type CloseOutcome, type CronJob, type LifecycleDeps } from "@/lib/data/polls/close";
+export { closeDuePolls, closePollAndFinish, isDueForJob, type CloseOutcome, type RepeatMode, type CronJob, type LifecycleDeps } from "@/lib/data/polls/close";
 export { runClosePollJob, runOpenPollJob, type JobResponse } from "@/lib/data/polls/cron";
 export {
   attachPendingImage,

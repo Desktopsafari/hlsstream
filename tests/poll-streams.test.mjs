@@ -176,9 +176,40 @@ test("a stream with polls turned off: no public poll, no new polls, skipped by t
   check("no fish poll was created", fake.db.polls.filter((p) => p.stream_id === "fish").length === 2);
 
   const noon = await cronOpen(ET(2026, 10, 16, 12, 10));
-  check("the noon job only runs for frogs (single-stream response)", noon.body.message === "No scheduled poll to open." && !("streams" in noon.body), JSON.stringify(noon.body));
+  const byStream = Object.fromEntries((noon.body.streams ?? []).map((s) => [s.stream, s]));
+  check("the noon job reports both streams", byStream.main?.message === "No scheduled poll to open." && /Polls are off for this stream, so nothing was opened\./.test(byStream.fish?.message ?? ""), JSON.stringify(noon.body));
   check("and doesn't open the fish poll", byId(S.id).status === "scheduled");
   check("frog page unaffected", (await publicPoll(AFTERNOON)).status === 200 && byId(F.id).status === "open");
+});
+
+test("a stream with polls turned off still has its ended polls closed and emailed, with no repeat copy", async () => {
+  const fake = await fresh();
+  fake.addStream({ polls_enabled: false });
+  // A 3-day poll that ended yesterday at 8 PM: the noon job closes it.
+  const L = addPollWithOptions(fake, {
+    question: "TEST fish long", status: "open", stream_id: "fish", opens_at: ET(2026, 10, 12, 12).toISOString(),
+    ends_at: ET(2026, 10, 14, 20).toISOString(), duration_days: 3,
+  });
+  const noon = await cronOpen(ET(2026, 10, 15, 12, 10));
+  check("the noon job closes the ended long poll on the polls-off stream", byId(L.id).status === "closed", JSON.stringify(noon.body));
+  check("and emails its results", emails().some((e) => e.question === "TEST fish long"));
+
+  // A repeating daily poll (e.g. opened before polls were turned off) that ends at 8 PM.
+  const D = addPollWithOptions(fake, { question: "TEST fish daily", status: "open", repeat_daily: true, stream_id: "fish", opens_at: ET(2026, 10, 15, 12, 15).toISOString() });
+  fake.addVote(D.id, optionsOf(D.id)[0].id, "s1");
+
+  const eve = await cronClose(ET(2026, 10, 15, 20, 30));
+  check("the 8 PM job closes the expired daily poll", byId(D.id).status === "closed", JSON.stringify(eve.body));
+  const mail = emails().find((e) => e.question === "TEST fish daily");
+  check("and emails its results once, with the vote", mail && emails().filter((e) => e.question === "TEST fish daily").length === 1 && mail.options[0].vote_count === 1);
+  check("no repeat copy is queued on the polls-off stream", fake.db.polls.filter((p) => p.status === "scheduled").length === 0);
+  check("the job says why", /no repeat was queued/.test(JSON.stringify(eve.body)));
+
+  // Close now by the admin on the polls-off stream: closes and emails, no copy.
+  const R = addPollWithOptions(fake, { question: "TEST fish now", status: "open", repeat_daily: true, stream_id: "fish", opens_at: ET(2026, 10, 16, 12, 5).toISOString() });
+  const closed = await call(ET(2026, 10, 16, 14), "closeNow", "POST", "/api/admin/polls/close-now", { pollId: R.id, stream_id: "fish" });
+  check("Close now works on the polls-off stream", closed.status === 200 && byId(R.id).status === "closed" && emails().some((e) => e.question === "TEST fish now"));
+  check("still no repeat copy", fake.db.polls.filter((p) => p.status === "scheduled").length === 0);
 });
 
 test("no file outside src/lib/data/polls/ queries the poll tables", () => {

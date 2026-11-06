@@ -10,7 +10,7 @@ import {
   selectAllPages,
   thumbUrl,
   type CaptureRow,
-} from "@/lib/capture";
+} from "@/lib/data/captures/core";
 import {
   ADMIN_TTL_MS,
   CAPTURES_ENV_HINT,
@@ -19,7 +19,7 @@ import {
   VISITOR_STORAGE_BUDGET_BYTES,
   VISITOR_TTL_MS,
   parseExternalVideoUrl,
-} from "@/lib/captureShared";
+} from "@/lib/data/captures/rules";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;
 

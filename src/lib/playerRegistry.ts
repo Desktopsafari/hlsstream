@@ -30,7 +30,7 @@ export function getPlayerVideo(): HTMLVideoElement | null {
 
 // Seconds behind the end of the public playlist, or null when the player
 // can't say (older browsers, not playing yet). The server then assumes the
-// typical delay (captureShared.ts FALLBACK_DELAY_SECONDS).
+// typical delay (data/captures/rules.ts FALLBACK_DELAY_SECONDS).
 export function behindLiveSeconds(): number | null {
   try {
     const v = handle?.latency() ?? null;

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { createCapture, parseCaptureInput } from "@/lib/capture";
-import { deleteCapture, loadCaptureOverview, updateCapture } from "@/lib/captureAdmin";
+import { createCapture, deleteCapture, loadCaptureOverview, parseCaptureInput, updateCapture } from "@/lib/data/captures";
 
 // The admin Captures tab (behind the admin login, see proxy.ts): the list
 // with usage and disk, capturing (no limits, clips up to 60 s), Feature /

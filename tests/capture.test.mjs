@@ -11,8 +11,8 @@ import { clampShift, parsePlaylist, pickClipSegments, pickPhotoFrame } from "../
 // reach any of this (src/lib/browserPhoto.ts); what's tested here is the
 // server path they fall back to, clips, and the admin side.
 
-const shared = await load("lib/captureShared.ts");
-const lib = await load("lib/capture.ts");
+const shared = await load("lib/data/captures/rules.ts");
+const lib = await load("lib/data/captures/index.ts");
 const publicRoute = await load("app/api/capture/route.ts");
 const adminRoute = await load("app/api/admin/captures/route.ts");
 const pauseRoute = await load("app/api/admin/captures/pause/route.ts");

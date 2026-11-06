@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import CollapsibleSection from "./CollapsibleSection";
 import ClickToPlay from "@/components/capture/ClickToPlay";
-import { ADMIN_CLIP_SECONDS, FALLBACK_DELAY_SECONDS, formatBytes } from "@/lib/captureShared";
+import { ADMIN_CLIP_SECONDS, FALLBACK_DELAY_SECONDS, formatBytes } from "@/lib/data/captures/rules";
 
 type Capture = {
   id: string;

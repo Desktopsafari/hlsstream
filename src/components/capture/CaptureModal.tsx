@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { photoFileName, type BrowserPhoto } from "@/lib/browserPhoto";
-import { VISITOR_TTL_LABEL } from "@/lib/captureShared";
+import { VISITOR_TTL_LABEL } from "@/lib/data/captures/rules";
 import ClickToPlay from "./ClickToPlay";
 
 export type ServerCapture = {

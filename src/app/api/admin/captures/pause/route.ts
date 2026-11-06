@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { setCapturesPaused } from "@/lib/capture";
+import { setCapturesPaused } from "@/lib/data/captures";
 
 // "Pause visitor captures": visitors can't save clips or server photos while
 // paused (photos taken in the browser never reach the server). The admin tab

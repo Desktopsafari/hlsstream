@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { cleanupCaptures } from "@/lib/capture";
+import { cleanupCaptures } from "@/lib/data/captures";
 
 // Pinged hourly by a cron entry on the VPS (not Vercel Cron), with
 // `Authorization: Bearer <CAPTURE_CRON_SECRET>` -- its own secret. Deletes

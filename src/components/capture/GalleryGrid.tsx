@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { GalleryItem } from "@/lib/capture";
-import { PROVIDER_LABELS } from "@/lib/captureShared";
+import type { GalleryItem } from "@/lib/data/captures";
+import { PROVIDER_LABELS } from "@/lib/data/captures/rules";
 import ClickToPlay from "./ClickToPlay";
 
 const download =

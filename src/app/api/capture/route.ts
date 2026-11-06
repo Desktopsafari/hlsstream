@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { getClientIp } from "@/lib/ip";
-import { captureConfig, createCapture, isCapturesPaused, parseCaptureInput } from "@/lib/capture";
+import { captureConfig, capturesTableReady, createCapture, isCapturesPaused, parseCaptureInput } from "@/lib/data/captures";
 
 // Whether the capture buttons show at all: only once the env vars are set
 // and supabase/captures.sql has been run (until then visitors see nothing).
@@ -10,8 +10,7 @@ export async function GET() {
   const headers = { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" };
   if (!captureConfig()) return NextResponse.json({ enabled: false }, { headers });
   const supabase = createServiceRoleClient();
-  const { error } = await supabase.from("captures").select("id", { count: "exact", head: true }).limit(1);
-  if (error) return NextResponse.json({ enabled: false }, { headers });
+  if (!(await capturesTableReady(supabase))) return NextResponse.json({ enabled: false }, { headers });
   return NextResponse.json({ enabled: true, paused: await isCapturesPaused(supabase) }, { headers });
 }
 

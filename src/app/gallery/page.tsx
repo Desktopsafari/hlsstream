@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { loadGallery, type GalleryItem } from "@/lib/capture";
+import { loadGallery, type GalleryItem } from "@/lib/data/captures";
 import GalleryGrid from "@/components/capture/GalleryGrid";
 import { SITE_NAME } from "@/config/constants";
 

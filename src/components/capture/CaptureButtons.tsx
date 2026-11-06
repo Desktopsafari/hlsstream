@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { behindLiveSeconds, getPlayerVideo, usePlayerStatus } from "@/lib/playerRegistry";
 import { takeBrowserPhoto } from "@/lib/browserPhoto";
-import { DEFAULT_VISITOR_CLIP_SECONDS } from "@/lib/captureShared";
+import { DEFAULT_VISITOR_CLIP_SECONDS } from "@/lib/data/captures/rules";
 import CaptureModal, { type ModalState } from "./CaptureModal";
 
 type Availability = { enabled: boolean; paused?: boolean };

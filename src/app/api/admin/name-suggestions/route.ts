@@ -1,23 +1,13 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { deleteName, listNameSuggestions, setNameShortlisted } from "@/lib/data/events";
+import { resolveStream, streamRefFrom } from "@/lib/data/streams";
 
-type Row = {
-  frog_id: string;
-  text: string;
-  normalized_text: string;
-  is_flagged: boolean;
-  is_shortlisted: boolean;
-  created_at: string;
-};
+// The name-idea review list for one event on the stream named by `stream_id`
+// in the body or `?stream=` (the frog stream when neither is given). Another
+// stream's event is "Event not found."
 
-type Group = {
-  key: string;
-  text: string;
-  count: number;
-  newestAt: string;
-  isFlagged: boolean;
-  isShortlisted: boolean;
-};
+const fail = (r: { status: number; error: string }) => NextResponse.json({ error: r.error }, { status: r.status });
 
 // Name ideas for one event, grouped per frog. Duplicates (same normalized
 // text) are merged with a count; sorted by count, then newest.
@@ -28,75 +18,11 @@ export async function GET(request: Request) {
   if (!eventId) return NextResponse.json({ error: "Missing eventId." }, { status: 400 });
 
   const supabase = createServiceRoleClient();
-
-  const { data: frogs } = await supabase
-    .from("suggestion_event_frogs")
-    .select("id, label, display_order")
-    .eq("event_id", eventId)
-    .order("display_order", { ascending: true });
-
-  // PostgREST returns at most 1000 rows per request, so page through them.
-  const rows: Row[] = [];
-  for (let from = 0; from < 20000; from += 1000) {
-    const { data, error } = await supabase
-      .from("name_suggestions")
-      .select("frog_id, text, normalized_text, is_flagged, is_shortlisted, created_at")
-      .eq("event_id", eventId)
-      .order("created_at", { ascending: false })
-      .range(from, from + 999);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    rows.push(...(data ?? []));
-    if (!data || data.length < 1000) break;
-  }
-
-  let hiddenFlaggedGroups = 0;
-  const result = (frogs ?? []).map((frog) => {
-    const byKey = new Map<string, Row[]>();
-    for (const r of rows) {
-      if (r.frog_id !== frog.id) continue;
-      const list = byKey.get(r.normalized_text) ?? [];
-      list.push(r);
-      byKey.set(r.normalized_text, list);
-    }
-
-    const groups: Group[] = [];
-    for (const [key, list] of byKey) {
-      const isFlagged = list.some((r) => r.is_flagged);
-      if (isFlagged && !includeFlagged) {
-        hiddenFlaggedGroups++;
-        continue;
-      }
-
-      // Show the spelling people used most; ties go to the newest (rows are
-      // already newest-first).
-      const spellings = new Map<string, number>();
-      for (const r of list) spellings.set(r.text, (spellings.get(r.text) ?? 0) + 1);
-      let text = list[0].text;
-      let best = 0;
-      for (const [t, n] of spellings) {
-        if (n > best) {
-          best = n;
-          text = t;
-        }
-      }
-
-      groups.push({
-        key,
-        text,
-        count: list.length,
-        newestAt: list[0].created_at,
-        isFlagged,
-        isShortlisted: list.some((r) => r.is_shortlisted),
-      });
-    }
-
-    groups.sort(
-      (a, b) => b.count - a.count || new Date(b.newestAt).getTime() - new Date(a.newestAt).getTime(),
-    );
-    return { frogId: frog.id, label: frog.label, groups };
-  });
-
-  return NextResponse.json({ frogs: result, hiddenFlaggedGroups });
+  const found = await resolveStream(supabase, streamRefFrom(request));
+  if (!found.ok) return fail(found);
+  const result = await listNameSuggestions(supabase, found.stream.id, eventId, includeFlagged);
+  if (!result.ok) return fail(result);
+  return NextResponse.json(result.body);
 }
 
 // Shortlist or un-shortlist a name (every merged duplicate at once).
@@ -113,13 +39,10 @@ export async function PUT(request: Request) {
   }
 
   const supabase = createServiceRoleClient();
-  const { error } = await supabase
-    .from("name_suggestions")
-    .update({ is_shortlisted: body.shortlisted })
-    .eq("event_id", eventId)
-    .eq("frog_id", frogId)
-    .eq("normalized_text", key);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const found = await resolveStream(supabase, streamRefFrom(request, body));
+  if (!found.ok) return fail(found);
+  const result = await setNameShortlisted(supabase, found.stream.id, { eventId, frogId, key }, body.shortlisted);
+  if (!result.ok) return fail(result);
   return NextResponse.json({ ok: true });
 }
 
@@ -132,12 +55,9 @@ export async function DELETE(request: Request) {
   }
 
   const supabase = createServiceRoleClient();
-  const { error } = await supabase
-    .from("name_suggestions")
-    .delete()
-    .eq("event_id", eventId)
-    .eq("frog_id", frogId)
-    .eq("normalized_text", key);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const found = await resolveStream(supabase, streamRefFrom(request, body));
+  if (!found.ok) return fail(found);
+  const result = await deleteName(supabase, found.stream.id, { eventId, frogId, key });
+  if (!result.ok) return fail(result);
   return NextResponse.json({ ok: true });
 }

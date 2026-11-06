@@ -53,7 +53,7 @@ Deviations made while doing steps 1–4 (and why):
 | 3 | 3 | `0002_stream_ids.sql` | written, not run |
 | 4 | 4 | `0003_settings_cron_email.sql` | written, not run |
 | 5 | 5 (part) | Shared infra: `streams` server helpers, `requireStream()`, branded `StreamId`, `lib/time/eastern.ts`, isolation-test scaffolding | |
-| 6 | 5 + 10 | Per feature, two commits each (move, then scope): polls → announcements/events → species → captures → push (global switch) → chat UI | polls done (5a, 2026-11-06) |
+| 6 | 5 + 10 | Per feature, two commits each (move, then scope): polls → announcements/events → species → captures → push (global switch) → chat UI | polls done (5a, 2026-11-06); announcements/events done (5b, 2026-11-06) |
 | 7 | — | Dead columns + probe code cleanup (decision 12, after the production check) | |
 | 8 | 6 | Chat service rooms + per-stream viewer counts (VPS deploy, ask first) | |
 | 9 | 7 | Stream-aware DST-proof crons with `-late` aliases | |
@@ -81,6 +81,25 @@ Left as they are on purpose in 5a; each gets its own later step.
 Also from 5a: the open and close crons go through **every** stream. Ended polls are closed and emailed on
 streams with `polls_enabled = false` too; only opening queued polls and queuing repeat copies are limited to
 streams with polls on. No `0004` was needed: production has no unique index or trigger on `polls` (checked 2026-11-06).
+
+### Deferred from 5b (announcements and naming events)
+
+Data layer in `src/lib/data/announcements/` and `src/lib/data/events/`; no SQL needed (`0002` already made
+`announcements.stream_id` nullable). Left as they are on purpose:
+
+- **Admin panel sends no stream or scope yet**: `AnnouncementsAdmin`, `SuggestionEventAdmin` and `LiveNowStrip` work on
+  the frog stream by default. The API takes `scope: "site-wide" | "stream"` on create and edit, and lists include
+  `scope`, but there is no control for it until the admin stream selector (step 10). No site-wide announcement can be
+  made from the panel until then.
+- **Public cards don't pass a stream yet**: `Announcements`, `AnnouncementCards` and `SuggestionEventCard` use the frog
+  stream until stream pages pass theirs in (step 12).
+- **Naming events are per stream only** (no site-wide events): `suggestion_events.stream_id` stays `not null`.
+- **Name-idea rate limit is shared by every stream** (`contact_form_attempts`, `form = 'name-event'`), as noted in §1.4.
+- **Announcement picture checks run across every stream**: the is-this-file-still-used check and the cleanup of
+  never-saved pending pictures. Frog pictures are stored under `<event_id>/`, not per stream.
+- **3-card cap counts site-wide and stream announcements together** (newest 3 win, site-wide shown above). A stream with
+  3 newer site-wide cards shows none of its own until one ends.
+- **`'poll'` button still links to `/#todays-vote`** (see §3.2; changes with the `/[slug]` route).
 
 ---
 

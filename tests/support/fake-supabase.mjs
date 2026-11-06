@@ -31,6 +31,10 @@ const COLUMNS = {
   stream_settings: ["stream_id", "key", "value", "updated_at"],
   cron_runs: ["stream_id", "job", "eastern_date", "status", "detail", "ran_at"],
   email_sends: ["id", "category_id", "category_name", "stream_id", "subject", "resend_broadcast_id", "created_at"],
+  // supabase/suggestion_events.sql
+  suggestion_events: ["id", "stream_id", "prompt", "description", "is_on", "ends_at", "created_at"],
+  suggestion_event_frogs: ["id", "event_id", "label", "image_path", "display_order"],
+  name_suggestions: ["id", "event_id", "frog_id", "text", "normalized_text", "is_flagged", "is_shortlisted", "created_at"],
 };
 
 // The one stream row the live database has after migrations/0001.
@@ -52,6 +56,9 @@ const PUSH_DEFAULTS = {
   stream_settings: () => ({ value: null, updated_at: new Date().toISOString() }),
   cron_runs: () => ({ status: "claimed", detail: null, ran_at: new Date().toISOString() }),
   email_sends: () => ({ category_id: null, category_name: null, stream_id: null, resend_broadcast_id: null }),
+  suggestion_events: () => ({ stream_id: "main", description: null, is_on: false, ends_at: null }),
+  suggestion_event_frogs: () => ({ image_path: null, display_order: 0 }),
+  name_suggestions: () => ({ is_flagged: false, is_shortlisted: false }),
   captures: () => ({ stream_id: "main", requester_hash: null, seconds: 0, bytes: 0, file_name: null, thumb_name: null, status: "pending", expires_at: null, featured: false, featured_at: null, kept: false, external_url: null }),
 };
 
@@ -69,6 +76,7 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
     push_categories: [], push_subscriptions: [], push_sends: [], push_scheduled: [], push_repeating: [], push_settings: [],
     captures: [],
     chat_messages: [], streams: [MAIN_STREAM()], stream_settings: [], cron_runs: [], email_sends: [],
+    suggestion_events: [], suggestion_event_frogs: [], name_suggestions: [],
   };
   const queries = []; // every table/view touched, in order (for "one small query when idle")
   const files = new Map(); // `${bucket}/${path}` -> { created_at, size }
@@ -216,6 +224,15 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
           db.poll_options = db.poll_options.filter((o) => !ids.includes(o.poll_id));
           db.votes = db.votes.filter((v) => !ids.includes(v.poll_id));
         }
+        if (this.table === "suggestion_events") {
+          const ids = hit.map((h) => h.id);
+          db.suggestion_event_frogs = db.suggestion_event_frogs.filter((f) => !ids.includes(f.event_id));
+          db.name_suggestions = db.name_suggestions.filter((n) => !ids.includes(n.event_id));
+        }
+        if (this.table === "suggestion_event_frogs") {
+          const ids = hit.map((h) => h.id);
+          db.name_suggestions = db.name_suggestions.filter((n) => !ids.includes(n.frog_id));
+        }
         result = hit;
       } else {
         result = rowsOf(this.table).filter((r) => this.filters.every((f) => f(r)));
@@ -314,6 +331,28 @@ export function createFake({ imageColumn = true, durationColumns = true, announc
       };
       if (row.image_path) files.set(`event-images/${row.image_path}`, { created_at: new Date().toISOString(), size: 1 });
       db.announcements.push(row);
+      return row;
+    },
+    // A suggestion event with its frogs (labels in display order).
+    addEvent(e = {}, labels = ["TEST frog A", "TEST frog B"]) {
+      const event = {
+        id: randomUUID(), stream_id: "main", prompt: "TEST name these frogs", description: null, is_on: true, ends_at: null,
+        created_at: new Date().toISOString(), ...e,
+      };
+      db.suggestion_events.push(event);
+      const frogs = labels.map((label, i) => {
+        const f = { id: randomUUID(), event_id: event.id, label, image_path: null, display_order: i };
+        db.suggestion_event_frogs.push(f);
+        return f;
+      });
+      return { event, frogs };
+    },
+    addNameSuggestion(eventId, frogId, text, n = {}) {
+      const row = {
+        id: randomUUID(), event_id: eventId, frog_id: frogId, text, normalized_text: text.toLowerCase(), is_flagged: false,
+        is_shortlisted: false, created_at: new Date().toISOString(), ...n,
+      };
+      db.name_suggestions.push(row);
       return row;
     },
     addSpeciesCard(c = {}) {

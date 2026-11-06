@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { getActiveEvent } from "@/lib/events";
+import { submitNameSuggestion } from "@/lib/data/events";
 import { getClientIp } from "@/lib/ip";
 import { allowAttempt } from "@/lib/rateLimit";
-import { containsProfanity } from "@/lib/profanity";
-import { cleanNameInput, normalizeName } from "@/lib/nameNormalize";
+import { cleanNameInput } from "@/lib/nameNormalize";
 import {
   EVENT_NAME_MAX_LENGTH,
   EVENT_RATE_LIMIT_MAX,
   EVENT_RATE_LIMIT_WINDOW_MS,
 } from "@/config/constants";
 
+// A visitor's name idea for the event that is active on that event's own
+// stream (like a vote, the event id says which stream). The rate-limit budget
+// is shared by every stream.
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const eventId = typeof body?.eventId === "string" ? body.eventId : "";
@@ -52,37 +54,11 @@ export async function POST(request: Request) {
     );
   }
 
-  // Checked here (not just when the card rendered) so a stale open tab can't
-  // submit after the event ends or is switched off.
-  const active = await getActiveEvent(supabase);
-  if (!active || active.event.id !== eventId) {
-    return NextResponse.json(
-      { error: "Name suggestions aren't open right now.", code: "event_closed" },
-      { status: 409 },
-    );
+  const result = await submitNameSuggestion(supabase, { eventId, frogId, text });
+  if (!result.ok) {
+    return NextResponse.json(result.code ? { error: result.error, code: result.code } : { error: result.error }, {
+      status: result.status,
+    });
   }
-  if (!active.frogs.some((f) => f.id === frogId)) {
-    return NextResponse.json({ error: "That frog isn't part of this event." }, { status: 400 });
-  }
-
-  const normalized = normalizeName(text);
-  if (normalized.length === 0) {
-    return NextResponse.json({ error: "Please type a name idea first." }, { status: 400 });
-  }
-
-  // The word list matches inside words, so it can catch innocent names.
-  // Flag rather than reject; flagged ideas are hidden in admin by default.
-  const { error } = await supabase.from("name_suggestions").insert({
-    event_id: eventId,
-    frog_id: frogId,
-    text,
-    normalized_text: normalized,
-    is_flagged: containsProfanity(text),
-  });
-  if (error) {
-    console.error("Failed to save name suggestion:", error.message);
-    return NextResponse.json({ error: "Couldn't save that, please try again." }, { status: 500 });
-  }
-
   return NextResponse.json({ ok: true });
 }

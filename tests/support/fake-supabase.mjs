@@ -56,6 +56,7 @@ const PUSH_DEFAULTS = {
   stream_settings: () => ({ value: null, updated_at: new Date().toISOString() }),
   cron_runs: () => ({ status: "claimed", detail: null, ran_at: new Date().toISOString() }),
   email_sends: () => ({ category_id: null, category_name: null, stream_id: null, resend_broadcast_id: null }),
+  species_cards: () => ({ species_name: "", scientific_name: null, conservation_status: null, photo_path: null, range_map_path: null, info_blocks: [], names_heading: "Frog names", names: [], updated_at: new Date().toISOString() }),
   suggestion_events: () => ({ stream_id: "main", description: null, is_on: false, ends_at: null }),
   suggestion_event_frogs: () => ({ image_path: null, display_order: 0 }),
   name_suggestions: () => ({ is_flagged: false, is_shortlisted: false }),

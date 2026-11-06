@@ -53,7 +53,7 @@ Deviations made while doing steps 1–4 (and why):
 | 3 | 3 | `0002_stream_ids.sql` | written, not run |
 | 4 | 4 | `0003_settings_cron_email.sql` | written, not run |
 | 5 | 5 (part) | Shared infra: `streams` server helpers, `requireStream()`, branded `StreamId`, `lib/time/eastern.ts`, isolation-test scaffolding | |
-| 6 | 5 + 10 | Per feature, two commits each (move, then scope): polls → announcements/events → species → captures → push (global switch) → chat UI | polls done (5a, 2026-11-06); announcements/events done (5b, 2026-11-06) |
+| 6 | 5 + 10 | Per feature, two commits each (move, then scope): polls → announcements/events → species → captures → push (global switch) → chat UI | polls done (5a, 2026-11-06); announcements/events done (5b, 2026-11-06); species done (5c, 2026-11-06) |
 | 7 | — | Dead columns + probe code cleanup (decision 12, after the production check) | |
 | 8 | 6 | Chat service rooms + per-stream viewer counts (VPS deploy, ask first) | |
 | 9 | 7 | Stream-aware DST-proof crons with `-late` aliases | |
@@ -100,6 +100,21 @@ Data layer in `src/lib/data/announcements/` and `src/lib/data/events/`; no SQL n
 - **3-card cap counts site-wide and stream announcements together** (newest 3 win, site-wide shown above). A stream with
   3 newer site-wide cards shows none of its own until one ends.
 - **`'poll'` button still links to `/#todays-vote`** (see §3.2; changes with the `/[slug]` route).
+
+### Deferred from 5c (species cards)
+
+Data layer in `src/lib/data/species/`; no SQL needed (`species_cards.stream_id` is already `unique`, so one card per
+stream, and the upserts conflict on it). Left as they are on purpose:
+
+- **Public card and admin form send no stream yet**: `SpeciesCard` (a client component; there is no server part) and
+  `SpeciesAdmin` use the frog stream by default until stream pages (step 12) and the admin selector (step 10).
+- **No card delete**: there never was one; saving creates the stream's card if missing. Removing a stream's card would
+  need a new admin action.
+- **Storage paths were already per stream**: files are `species-images/<stream id>/<kind>-<time>.<ext>`; the frog
+  stream's are under `main/`. Nothing was moved.
+- **The names block heading defaults to "Frog names"** on every stream (`NAMES_HEADING_DEFAULT` and the column default);
+  a fish card needs its heading set by hand.
+- **Dead column cleanup** (`species_cards.residents`, decision 12) is still its own step; nothing here reads or writes it.
 
 ---
 

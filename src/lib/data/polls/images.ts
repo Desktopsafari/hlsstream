@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { createServiceRoleClient } from "@/lib/supabase/server";
 import { EVENT_BUCKET } from "@/config/constants";
 import { checkImageUpload } from "@/lib/imageUpload";
-import { publicImageUrl } from "@/lib/species";
+import { publicImageUrl } from "@/lib/publicImageUrl";
 import type { StreamId } from "@/lib/data/streams";
 
 type Supabase = ReturnType<typeof createServiceRoleClient>;

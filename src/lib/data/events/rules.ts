@@ -1,5 +1,5 @@
 import { EVENT_BUCKET } from "@/config/constants";
-import { publicImageUrl } from "@/lib/species";
+import { publicImageUrl } from "@/lib/publicImageUrl";
 
 // Suggestion (naming) events: one active event per stream, with the frogs
 // shown on its card and the name ideas visitors send in. Each event belongs to

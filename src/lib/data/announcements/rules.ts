@@ -1,5 +1,5 @@
 import { EVENT_BUCKET } from "@/config/constants";
-import { publicImageUrl } from "@/lib/species";
+import { publicImageUrl } from "@/lib/publicImageUrl";
 import { formatEasternDate, formatEasternDay, parseEasternDateTime, toEasternDateTimeInput } from "@/lib/pollSchedule";
 import {
   ANNOUNCEMENT_MAX_VISIBLE,

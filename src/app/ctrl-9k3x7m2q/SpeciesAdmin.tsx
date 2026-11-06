@@ -10,7 +10,7 @@ import {
   NAMES_MAX,
   type InfoBlock,
   type SpeciesCardData,
-} from "@/lib/species";
+} from "@/lib/data/species/rules";
 
 type ImageKind = "photo" | "range";
 

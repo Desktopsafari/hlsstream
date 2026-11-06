@@ -5,7 +5,7 @@ import Image from "next/image";
 import {
   CONSERVATION_STATUSES,
   type SpeciesCardData,
-} from "@/lib/species";
+} from "@/lib/data/species/rules";
 
 const HOVER_DELAY_MS = 1000;
 // Names shown on the compact phone card before "Show all".

@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { getVisibleAnnouncements } from "@/lib/announcements";
+import { getVisibleAnnouncements } from "@/lib/data/announcements";
+import { resolveStream } from "@/lib/data/streams";
 import type { PublicAnnouncement } from "@/lib/announcementLinks";
 import AnnouncementCards from "./AnnouncementCards";
 
@@ -15,8 +16,10 @@ export default async function Announcements() {
   await connection();
   let initial: PublicAnnouncement[] = [];
   try {
+    const supabase = createServiceRoleClient();
     initial = await Promise.race([
-      getVisibleAnnouncements(createServiceRoleClient()),
+      // The frog stream until stream pages pass their own stream in.
+      resolveStream(supabase, null).then((found) => (found.ok ? getVisibleAnnouncements(supabase, found.stream.id) : [])),
       new Promise<PublicAnnouncement[]>((resolve) => setTimeout(() => resolve([]), SERVER_WAIT_MS)),
     ]);
   } catch {

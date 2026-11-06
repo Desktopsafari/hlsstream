@@ -1,7 +1,4 @@
-import { randomUUID } from "node:crypto";
-import type { createServiceRoleClient } from "@/lib/supabase/server";
-import { EVENT_BUCKET, STREAM_ID } from "@/config/constants";
-import { checkImageUpload } from "@/lib/imageUpload";
+import { EVENT_BUCKET } from "@/config/constants";
 import { publicImageUrl } from "@/lib/species";
 import { formatEasternDate, formatEasternDay, parseEasternDateTime, toEasternDateTimeInput } from "@/lib/pollSchedule";
 import {
@@ -10,13 +7,15 @@ import {
   type AnnouncementButtonKind,
   type PublicAnnouncement,
 } from "@/lib/announcementLinks";
-
-type Supabase = ReturnType<typeof createServiceRoleClient>;
+import type { StreamId } from "@/lib/data/streams";
 
 // Announcement cards: short notices shown above the suggestion event card.
 // Whether one shows is decided from the real clock on every request (switch,
 // start, end) -- no cron job turns them on or off. Pictures live in the naming
 // events' bucket under announcements/, using the same checks as poll pictures.
+//
+// Scope: stream_id null = site-wide (every stream page), otherwise only that
+// stream's page. This file has no queries; see public.ts, manage.ts, images.ts.
 
 export const TITLE_MAX = 80;
 export const MESSAGE_MAX = 600;
@@ -25,12 +24,13 @@ export const BUTTON_LABEL_MAX = 30;
 export const ANNOUNCEMENTS_SQL_HINT =
   "Announcements need their database table first: run supabase/announcements.sql in the Supabase SQL Editor.";
 
-const COLUMNS =
+export const ANNOUNCEMENT_COLUMNS =
   "id, stream_id, title, message, image_path, button_label, button_kind, button_target, is_on, starts_at, ends_at, created_at";
 
 export type AnnouncementRow = {
   id: string;
-  stream_id: string;
+  // null = site-wide.
+  stream_id: string | null;
   title: string;
   message: string;
   image_path: string | null;
@@ -43,11 +43,37 @@ export type AnnouncementRow = {
   created_at: string;
 };
 
+export type AdminResult<T = object> =
+  | ({ ok: true } & T)
+  | { ok: false; status: number; error: string; code?: string };
+
 // The table hasn't been created yet (supabase/announcements.sql not run).
 export function isMissingTable(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
   if (error.code === "42P01" || error.code === "PGRST205") return true;
   return /announcements/i.test(error.message ?? "") && /does not exist|schema cache/i.test(error.message ?? "");
+}
+
+// ---- scope ----------------------------------------------------------------------
+
+// Whether an admin working on `streamId` may see and change this announcement:
+// site-wide ones and that stream's own, never another stream's.
+export function inStreamScope(row: Pick<AnnouncementRow, "stream_id">, streamId: StreamId): boolean {
+  return row.stream_id === null || row.stream_id === streamId;
+}
+
+export const SCOPE_ERROR = 'Pick where it shows: "site-wide" or "stream" (the stream you are working on).';
+
+// What the admin sends as `scope`: "site-wide" (stream_id null) or "stream"
+// (the stream the request is for). Not sent = undefined; anything else = error.
+export function parseScope(
+  value: unknown,
+  streamId: StreamId,
+): { ok: true; streamId: StreamId | null | undefined } | { ok: false; error: string } {
+  if (value === undefined || value === null || value === "") return { ok: true, streamId: undefined };
+  if (value === "site-wide") return { ok: true, streamId: null };
+  if (value === "stream") return { ok: true, streamId };
+  return { ok: false, error: SCOPE_ERROR };
 }
 
 // ---- visibility -------------------------------------------------------------
@@ -66,15 +92,18 @@ export function isAnnouncementVisible(
 }
 
 // Newest first = most recently created first.
-function newestFirst<T extends Pick<AnnouncementRow, "created_at">>(rows: T[]): T[] {
+export function newestFirst<T extends Pick<AnnouncementRow, "created_at">>(rows: T[]): T[] {
   return [...rows].sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
 }
 
-// The cards visitors see: at most ANNOUNCEMENT_MAX_VISIBLE, newest first.
-// Any others that are also visible wait until one of these ends or is
-// switched off.
+// The cards visitors see on one stream's page, given its own and the
+// site-wide announcements: at most ANNOUNCEMENT_MAX_VISIBLE, chosen newest
+// first whatever their scope; then site-wide ones are shown above the
+// stream's own (each group still newest first). Any others that are also
+// visible wait until one of these ends or is switched off.
 export function pickVisible<T extends AnnouncementRow>(rows: T[], now: Date = new Date()): T[] {
-  return newestFirst(rows.filter((a) => isAnnouncementVisible(a, now))).slice(0, ANNOUNCEMENT_MAX_VISIBLE);
+  const chosen = newestFirst(rows.filter((a) => isAnnouncementVisible(a, now))).slice(0, ANNOUNCEMENT_MAX_VISIBLE);
+  return [...chosen.filter((a) => a.stream_id === null), ...chosen.filter((a) => a.stream_id !== null)];
 }
 
 export function announcementImageUrl(path: string | null | undefined): string | null {
@@ -91,28 +120,6 @@ export function toPublicAnnouncement(a: AnnouncementRow): PublicAnnouncement {
     button: href && a.button_label ? { label: a.button_label, ...href } : null,
     endsAt: a.ends_at,
   };
-}
-
-// What the home page shows right now. Any failure (including the table not
-// existing yet) means "no announcements", so the page is never broken by it.
-export async function getVisibleAnnouncements(
-  supabase: Supabase,
-  now: Date = new Date(),
-  streamId: string = STREAM_ID,
-): Promise<PublicAnnouncement[]> {
-  try {
-    const { data, error } = await supabase
-      .from("announcements")
-      .select(COLUMNS)
-      .eq("stream_id", streamId)
-      .eq("is_on", true)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (error || !data) return [];
-    return pickVisible(data as AnnouncementRow[], now).map(toPublicAnnouncement);
-  } catch {
-    return [];
-  }
 }
 
 // ---- admin status line ------------------------------------------------------
@@ -153,6 +160,9 @@ export function announcementStatus(
 export function toAdminAnnouncement(a: AnnouncementRow, shownIds: Set<string>, now: Date = new Date()) {
   return {
     id: a.id,
+    // "site-wide" (every stream page) or "stream" (only the stream the admin
+    // is working on). The admin panel doesn't show this yet.
+    scope: a.stream_id === null ? ("site-wide" as const) : ("stream" as const),
     title: a.title,
     message: a.message,
     imagePath: a.image_path,
@@ -276,137 +286,3 @@ export function parseAnnouncementInput(body: unknown, now: Date = new Date()): P
     },
   };
 }
-
-// ---- pictures -----------------------------------------------------------------
-
-// A picture picked before the announcement is saved waits in
-// announcements/pending/ and is moved to announcements/<id>/ on save. Pending
-// files that were never used are deleted once a day old (checked whenever the
-// admin list loads, so no extra cron job is needed).
-const PENDING_PREFIX = "announcements/pending/";
-const PENDING_RE = /^announcements\/pending\/[A-Za-z0-9._-]+$/;
-const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-
-export function isPendingPath(value: unknown): value is string {
-  return typeof value === "string" && PENDING_RE.test(value);
-}
-
-export type ImageFailure = { ok: false; status: number; code?: string; error: string };
-export type ImageResult = { ok: true; path: string; url: string | null } | ImageFailure;
-
-// A file is only deleted once no announcement points at it any more. If we
-// can't tell, we keep it.
-export async function removeFileIfUnreferenced(supabase: Supabase, path: string): Promise<boolean> {
-  const { data, error } = await supabase.from("announcements").select("id").eq("image_path", path).limit(1);
-  if (error || (data?.length ?? 0) > 0) return false;
-  await supabase.storage.from(EVENT_BUCKET).remove([path]);
-  return true;
-}
-
-async function loadAnnouncement(
-  supabase: Supabase,
-  id: string,
-): Promise<{ row: { id: string; image_path: string | null } } | ImageFailure> {
-  const { data, error } = await supabase.from("announcements").select("id, image_path").eq("id", id).maybeSingle();
-  if (isMissingTable(error)) return { ok: false, status: 400, code: "unsupported", error: ANNOUNCEMENTS_SQL_HINT };
-  if (error || !data) return { ok: false, status: 404, error: "Announcement not found." };
-  return { row: data };
-}
-
-const savedPath = (id: string, ext: string) => `announcements/${id}/picture-${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
-
-// Replace (or set) the picture on a saved announcement.
-export async function setAnnouncementImage(supabase: Supabase, id: string, file: File): Promise<ImageResult> {
-  const check = await checkImageUpload(file);
-  if (!check.ok) return { ok: false, status: 400, error: check.error };
-
-  const loaded = await loadAnnouncement(supabase, id);
-  if (!("row" in loaded)) return loaded;
-  const { row } = loaded;
-
-  const path = savedPath(row.id, check.ext);
-  const { error: uploadError } = await supabase.storage
-    .from(EVENT_BUCKET)
-    .upload(path, file, { contentType: check.contentType, upsert: false });
-  if (uploadError) return { ok: false, status: 500, error: uploadError.message };
-
-  const { error: dbError } = await supabase.from("announcements").update({ image_path: path }).eq("id", row.id);
-  if (dbError) {
-    await supabase.storage.from(EVENT_BUCKET).remove([path]);
-    return { ok: false, status: 500, error: dbError.message };
-  }
-
-  if (row.image_path) await removeFileIfUnreferenced(supabase, row.image_path);
-  return { ok: true, path, url: announcementImageUrl(path) };
-}
-
-export async function clearAnnouncementImage(supabase: Supabase, id: string): Promise<{ ok: true } | ImageFailure> {
-  const loaded = await loadAnnouncement(supabase, id);
-  if (!("row" in loaded)) return loaded;
-  const { row } = loaded;
-  if (!row.image_path) return { ok: true };
-
-  const { error } = await supabase.from("announcements").update({ image_path: null }).eq("id", row.id);
-  if (error) return { ok: false, status: 500, error: error.message };
-  await removeFileIfUnreferenced(supabase, row.image_path);
-  return { ok: true };
-}
-
-export async function uploadPendingImage(supabase: Supabase, file: File): Promise<ImageResult> {
-  const check = await checkImageUpload(file);
-  if (!check.ok) return { ok: false, status: 400, error: check.error };
-  const path = `${PENDING_PREFIX}${randomUUID()}.${check.ext}`;
-  const { error } = await supabase.storage
-    .from(EVENT_BUCKET)
-    .upload(path, file, { contentType: check.contentType, upsert: false });
-  if (error) return { ok: false, status: 500, error: error.message };
-  return { ok: true, path, url: announcementImageUrl(path) };
-}
-
-export async function deletePendingImage(supabase: Supabase, path: string): Promise<void> {
-  if (!isPendingPath(path)) return;
-  await supabase.storage.from(EVENT_BUCKET).remove([path]);
-}
-
-// Moves a pending file into the announcement's own folder and records it.
-export async function attachPendingImage(
-  supabase: Supabase,
-  id: string,
-  pendingPath: string,
-): Promise<{ ok: true; path: string } | ImageFailure> {
-  if (!isPendingPath(pendingPath)) {
-    return { ok: false, status: 400, error: "That picture isn't a valid pending upload." };
-  }
-  const ext = pendingPath.split(".").pop() ?? "jpg";
-  const path = savedPath(id, ext);
-  const { error: moveError } = await supabase.storage.from(EVENT_BUCKET).move(pendingPath, path);
-  if (moveError) return { ok: false, status: 400, error: `Couldn't use that picture: ${moveError.message}` };
-
-  const { error: dbError } = await supabase.from("announcements").update({ image_path: path }).eq("id", id);
-  if (dbError) {
-    await supabase.storage.from(EVENT_BUCKET).remove([path]);
-    return { ok: false, status: 500, error: dbError.message };
-  }
-  return { ok: true, path };
-}
-
-export async function cleanupPendingAnnouncementImages(
-  supabase: Supabase,
-  now: number = Date.now(),
-): Promise<{ removed: number; error?: string }> {
-  const folder = PENDING_PREFIX.replace(/\/$/, "");
-  const { data, error } = await supabase.storage.from(EVENT_BUCKET).list(folder, { limit: 1000 });
-  if (error) return { removed: 0, error: error.message };
-  const stale = (data ?? [])
-    .filter((f: { name: string; created_at?: string | null }) => {
-      const created = f.created_at ? Date.parse(f.created_at) : NaN;
-      return Number.isFinite(created) && now - created > PENDING_MAX_AGE_MS;
-    })
-    .map((f: { name: string }) => `${PENDING_PREFIX}${f.name}`);
-  if (stale.length === 0) return { removed: 0 };
-  const { error: removeError } = await supabase.storage.from(EVENT_BUCKET).remove(stale);
-  if (removeError) return { removed: 0, error: removeError.message };
-  return { removed: stale.length };
-}
-
-export { COLUMNS as ANNOUNCEMENT_COLUMNS };

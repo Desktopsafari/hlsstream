@@ -3,14 +3,14 @@ import {
   BUCKET, ET, bigPng, check, fresh, formReq, jpg, json, load, png, req, textAsPng, textFile, withNow,
 } from "./support/helpers.mjs";
 
-const lib = await load("lib/announcements.ts");
+const lib = await load("lib/data/announcements/index.ts");
 const links = await load("lib/announcementLinks.ts");
 const adminRoute = await load("app/api/admin/announcements/route.ts");
 const imageRoute = await load("app/api/admin/announcements/image/route.ts");
 const publicRoute = await load("app/api/announcements/route.ts");
 
-const visibleAt = (date) => withNow(date, async () => json(await publicRoute.GET()));
-const adminList = (date) => withNow(date, async () => json(await adminRoute.GET()));
+const visibleAt = (date) => withNow(date, async () => json(await publicRoute.GET(req("GET", "/api/announcements"))));
+const adminList = (date) => withNow(date, async () => json(await adminRoute.GET(req("GET", "/api/admin/announcements"))));
 const create = (date, body) =>
   withNow(date, async () => json(await adminRoute.POST(req("POST", "/api/admin/announcements", body))));
 const update = (date, body) =>
@@ -92,7 +92,7 @@ test("the site keeps working before supabase/announcements.sql is run", async ()
   check("admin: supported=false", admin.status === 200 && admin.body.supported === false);
   const made = await create(ET(2026, 10, 20, 9), base);
   check("admin: saving explains which SQL file to run", made.status === 400 && /announcements\.sql/.test(made.body.error));
-  check("the page's server helper also returns nothing", (await lib.getVisibleAnnouncements(globalThis.__fake)).length === 0);
+  check("the page's server helper also returns nothing", (await lib.getVisibleAnnouncements(globalThis.__fake, "main")).length === 0);
 });
 
 test("validation: lengths, plain text, timing", async () => {

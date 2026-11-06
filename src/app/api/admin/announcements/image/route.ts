@@ -6,12 +6,14 @@ import {
   isPendingPath,
   setAnnouncementImage,
   uploadPendingImage,
-} from "@/lib/announcements";
+} from "@/lib/data/announcements";
+import { resolveStream, streamRefFrom } from "@/lib/data/streams";
 
 // An announcement's picture. With an id the picture goes straight onto that
-// announcement (the old file is deleted). Without one it's a "pending" upload
-// for a new announcement that hasn't been saved yet; the form passes the
-// returned path back when it saves.
+// announcement (the old file is deleted) -- only one that is site-wide or on
+// the stream named by `stream_id` / `?stream=` (the frog stream when neither
+// is given). Without one it's a "pending" upload for a new announcement that
+// hasn't been saved yet; the form passes the returned path back when it saves.
 export async function POST(request: Request) {
   const formData = await request.formData().catch(() => null);
   const file = formData?.get("file");
@@ -22,10 +24,14 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceRoleClient();
-  const result =
-    typeof id === "string" && id
-      ? await setAnnouncementImage(supabase, id, file)
-      : await uploadPendingImage(supabase, file);
+  let result;
+  if (typeof id === "string" && id) {
+    const found = await resolveStream(supabase, streamRefFrom(request, formData ?? undefined));
+    if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status });
+    result = await setAnnouncementImage(supabase, found.stream.id, id, file);
+  } else {
+    result = await uploadPendingImage(supabase, file);
+  }
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error, code: result.code }, { status: result.status });
@@ -40,7 +46,9 @@ export async function DELETE(request: Request) {
   const supabase = createServiceRoleClient();
 
   if (id) {
-    const result = await clearAnnouncementImage(supabase, id);
+    const found = await resolveStream(supabase, streamRefFrom(request));
+    if (!found.ok) return NextResponse.json({ error: found.error }, { status: found.status });
+    const result = await clearAnnouncementImage(supabase, found.stream.id, id);
     if (!result.ok) {
       return NextResponse.json({ error: result.error, code: result.code }, { status: result.status });
     }

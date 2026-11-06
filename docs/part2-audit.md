@@ -53,7 +53,7 @@ Deviations made while doing steps 1–4 (and why):
 | 3 | 3 | `0002_stream_ids.sql` | written, not run |
 | 4 | 4 | `0003_settings_cron_email.sql` | written, not run |
 | 5 | 5 (part) | Shared infra: `streams` server helpers, `requireStream()`, branded `StreamId`, `lib/time/eastern.ts`, isolation-test scaffolding | |
-| 6 | 5 + 10 | Per feature, two commits each (move, then scope): polls → announcements/events → species → captures → push (global switch) → chat UI | |
+| 6 | 5 + 10 | Per feature, two commits each (move, then scope): polls → announcements/events → species → captures → push (global switch) → chat UI | polls done (5a, 2026-11-06) |
 | 7 | — | Dead columns + probe code cleanup (decision 12, after the production check) | |
 | 8 | 6 | Chat service rooms + per-stream viewer counts (VPS deploy, ask first) | |
 | 9 | 7 | Stream-aware DST-proof crons with `-late` aliases | |
@@ -66,6 +66,21 @@ Deviations made while doing steps 1–4 (and why):
 | 16 | 13 | Flip: `/` = landing when ≥ 2 streams listed, else the single stream page | |
 
 The step details in §4 keep their old numbers; use the table above for order.
+
+### Deferred from 5a (polls)
+
+Left as they are on purpose in 5a; each gets its own later step.
+
+- **"Hide closed polls after" stays site-wide**: still read from and written to `site_settings`. Moving it to
+  `stream_settings` needs a copy of the current value in the same change (see "Deviations" above).
+- **Results email doesn't name the stream**: two streams' results emails look alike until the subject or body says which stream.
+- **Vote unlink runs across every stream** (`src/lib/data/polls/unlink.ts`): same retention rule everywhere, intentionally unscoped.
+- **Picture reuse check runs across every stream** (`removeFileIfUnreferenced` in `src/lib/data/polls/images.ts`):
+  a file still used by any poll is never deleted.
+
+Also from 5a: the open and close crons go through **every** stream. Ended polls are closed and emailed on
+streams with `polls_enabled = false` too; only opening queued polls and queuing repeat copies are limited to
+streams with polls on. No `0004` was needed: production has no unique index or trigger on `polls` (checked 2026-11-06).
 
 ---
 
